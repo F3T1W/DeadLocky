@@ -1,5 +1,7 @@
 using DeadLocky.Features.LaunchGame.Api;
 using DeadLocky.Features.LaunchGame.Ui;
+using DeadLocky.Features.ManageMods.Api;
+using DeadLocky.Features.ManageMods.Ui;
 using DeadLocky.Features.PrepareGame.Api;
 using DeadLocky.Features.PrepareGame.Ui;
 using DeadLocky.Shared.Api.Directories;
@@ -14,6 +16,10 @@ public sealed class LauncherWindowController : NSWindowController
 #if DEBUG
     private readonly NSButton _testSetup = LauncherStyle.Button("Test setup…");
 #endif
+    private readonly NSView _launcherPage;
+    private readonly NSButton _launcherTab = LauncherStyle.Button("Launcher", true);
+    private readonly NSButton _modsTab = LauncherStyle.Button("Mods");
+    private ModManagerView? _mods;
     private bool _disposed;
     private LaunchGameView? _launch;
     private bool _wasGameActive;
@@ -30,6 +36,7 @@ public sealed class LauncherWindowController : NSWindowController
 #endif
         var content = new LauncherBackdropView();
         var page = new NSView { TranslatesAutoresizingMaskIntoConstraints = false };
+        _launcherPage = page;
         content.AddSubview(page);
         NSImageView mark = LauncherStyle.Symbol("circle.hexagongrid.fill", LauncherStyle.Accent);
         NSTextField title = LauncherStyle.Label("DeadLocky", 60, NSFontWeight.Semibold);
@@ -76,6 +83,65 @@ public sealed class LauncherWindowController : NSWindowController
         ]);
     }
 
+    public void ConfigureMods(ModWorkspace workspace, ModCatalogClient catalog)
+    {
+        if (_mods is not null)
+        {
+            throw new InvalidOperationException("Mods are already configured.");
+        }
+
+        NSView content = Window.ContentView!;
+        _mods = new ModManagerView(Window, workspace, catalog) { Hidden = true };
+        content.AddSubview(_mods);
+        content.AddSubview(_launcherTab);
+        content.AddSubview(_modsTab);
+        _launcherTab.Activated += OnLauncherTab;
+        _modsTab.Activated += OnModsTab;
+        _mods.BusyChanged += OnModsBusyChanged;
+        NSLayoutConstraint.ActivateConstraints(
+        [
+            _launcherTab.BottomAnchor.ConstraintEqualTo(content.BottomAnchor, -24),
+            _launcherTab.LeadingAnchor.ConstraintEqualTo(content.LeadingAnchor, 28),
+            _modsTab.LeadingAnchor.ConstraintEqualTo(_launcherTab.TrailingAnchor, 8),
+            _modsTab.CenterYAnchor.ConstraintEqualTo(_launcherTab.CenterYAnchor),
+            _mods.LeadingAnchor.ConstraintEqualTo(content.LeadingAnchor, 28),
+            _mods.TrailingAnchor.ConstraintEqualTo(content.TrailingAnchor, -28),
+            _mods.TopAnchor.ConstraintEqualTo(content.TopAnchor, 56),
+            _mods.BottomAnchor.ConstraintEqualTo(_launcherTab.TopAnchor, -20)
+        ]);
+        _mods.SetGameBusy(_launch?.IsActive == true || _selection.IsInstallationBusy);
+        _launch?.SetProfileSummary(_mods.ProfileSummary);
+    }
+
+    private void OnLauncherTab(object? sender, EventArgs args)
+    {
+        ShowMods(false);
+    }
+
+    private void OnModsTab(object? sender, EventArgs args)
+    {
+        ShowMods(true);
+    }
+
+    private void ShowMods(bool show)
+    {
+        _launcherPage.Hidden = show;
+        _mods?.Hidden = !show;
+
+        _launcherTab.BezelColor = show ? null : LauncherStyle.Accent;
+        _modsTab.BezelColor = show ? LauncherStyle.Accent : null;
+    }
+
+    private void OnModsBusyChanged(object? sender, EventArgs args)
+    {
+        if (_mods is { } mods)
+        {
+            _launch?.SetProfileSummary(mods.ProfileSummary);
+        }
+
+        OnPreparationChanged(sender, args);
+    }
+
     public void ConfigureGameLauncher(IGameLauncher launcher)
     {
         if (_launch is not null)
@@ -99,7 +165,9 @@ public sealed class LauncherWindowController : NSWindowController
 
     private void OnPreparationChanged(object? sender, EventArgs args)
     {
-        _launch?.SetInstallation(_selection.DirectoryPath, _selection.IsDownloaded, _selection.IsInstallationBusy);
+        _launch?.SetInstallation(_selection.DirectoryPath, _selection.IsDownloaded,
+            _selection.IsInstallationBusy || _mods?.IsBusy == true);
+        _mods?.SetGameBusy(_launch?.IsActive == true || _selection.IsInstallationBusy);
     }
 
     public void UseSteamClientPreparation()
@@ -144,6 +212,7 @@ public sealed class LauncherWindowController : NSWindowController
         bool finished = _wasGameActive && !active;
         _wasGameActive = active;
         _selection.SetGameRunning(active);
+        _mods?.SetGameBusy(active || _selection.IsInstallationBusy);
         if (finished)
         {
             _ = _selection.RefreshSteamClientAsync();
@@ -171,6 +240,14 @@ public sealed class LauncherWindowController : NSWindowController
                 _launch.Dispose();
             }
 
+            _launcherTab.Activated -= OnLauncherTab;
+            _modsTab.Activated -= OnModsTab;
+            if (_mods is not null)
+            {
+                _mods.BusyChanged -= OnModsBusyChanged;
+                _mods.Dispose();
+            }
+
             _selection.Dispose();
         }
 
@@ -182,7 +259,7 @@ public sealed class LauncherWindowController : NSWindowController
         const NSWindowStyle style = NSWindowStyle.Titled | NSWindowStyle.Closable
                                                          | NSWindowStyle.Miniaturizable | NSWindowStyle.Resizable |
                                                          NSWindowStyle.FullSizeContentView;
-        var window = new NSWindow(new CGRect(0, 0, 820, 780), style, NSBackingStore.Buffered, false)
+        var window = new NSWindow(new CGRect(0, 0, 1100, 850), style, NSBackingStore.Buffered, false)
         {
             Title = "DeadLocky",
             CollectionBehavior = NSWindowCollectionBehavior.FullScreenPrimary,
@@ -191,7 +268,7 @@ public sealed class LauncherWindowController : NSWindowController
             MovableByWindowBackground = true,
             Appearance = NSAppearance.GetAppearance(NSAppearance.NameDarkAqua),
             BackgroundColor = LauncherStyle.Background,
-            ContentMinSize = new CGSize(700, 780)
+            ContentMinSize = new CGSize(1024, 780)
         };
         window.Center();
         return window;

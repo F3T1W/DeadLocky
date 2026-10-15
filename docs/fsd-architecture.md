@@ -15,7 +15,9 @@ The [Mermaid UML diagram](../README.md#architecture-and-checks) is maintained di
 - Features/PrepareGame owns selected directory, saved sign-in and installation state. Its service
   delegates authentication and download to the Windows Steam client configured by LaunchGame.
 - Features/LaunchGame owns runtime preparation, configuration, launch, monitoring and prefix cleanup.
-- Entities contains GameDirectory and SteamAccount values.
+- Features/ManageMods owns the remote catalog adapter, protected and custom profile persistence,
+  bounded archive extraction, VPK validation, resource conflicts, and journaled game deployment.
+- Entities contains GameDirectory, SteamAccount, ModProfile and InstalledMod values.
 - Shared contains generic directory selection and native presentation helpers.
 
 The composition root injects delegates between features instead of creating cross-slice imports.
@@ -42,6 +44,23 @@ its returned configuration into the production launcher. Rosetta remains a share
 IGameSession.Completion follows the game process, rather than Steam's initial command process.
 Monitoring can attach to an existing matching game. Disposing monitoring never kills the game.
 The saved exit preference controls Steam cleanup scoped to the configured prefix.
+
+## Mod application
+
+The composition root injects `ModWorkspace.ApplyAsync` into the launcher's pre-launch callback and
+injects the launcher's game/Steam idle check into the mod workspace. Neither feature imports the other.
+The launcher's existing start semaphore covers preparation and game startup. A workspace semaphore
+and exclusive file lock serialize profile writes and deployment across windows and app instances.
+The Pages layer forwards busy state and the active profile summary between the native feature views.
+
+Profiles and installed package metadata use source-generated JSON. Packages remain in application support;
+archives never extract directly into the game. VPK indexes validate entry bounds, referenced data and
+resource paths. Each deployed file has a SHA-256 ownership entry. Staged directory swaps and atomic
+configuration writes use a persisted recovery journal, with backup data retained until commit.
+Recovery preserves newer Steam configuration and refuses changed or unmanaged deployment files.
+The Vanilla profile removes only DeadLocky-owned files and its search path; it does not remove other
+mod managers' files. Reapplying the selected profile before every Play handles ordinary Steam updates,
+but a new game build can still change mod compatibility and needs real-game verification.
 
 ## NativeAOT and validation
 

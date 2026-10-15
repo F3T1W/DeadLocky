@@ -37,8 +37,19 @@ public sealed class GameSessionTests
         {
             Assert.False(own.HasExited);
             Assert.False(other.HasExited);
-            await MacGameProcessScanner.StopPrefixProcessesAsync(
-                new GameLaunchConfiguration("/unused", root), CancellationToken.None);
+            string runtime = Path.Combine(root, "runtime");
+            string wine = Path.Combine(runtime, "bin", "wine64");
+            _ = Directory.CreateDirectory(Path.GetDirectoryName(wine)!);
+            _ = Directory.CreateDirectory(Path.Combine(runtime, "lib", "D3DMetal.framework"));
+            await File.WriteAllTextAsync(wine, "");
+            string steam = Path.Combine(root, "drive_c", "Program Files", "Steam", "steam.exe");
+            _ = Directory.CreateDirectory(Path.GetDirectoryName(steam)!);
+            await File.WriteAllTextAsync(steam, "");
+            using var launcher = new GptkGameLauncher(Path.Combine(root, "launch.json"));
+            launcher.Configure(new GameLaunchConfiguration(wine, root));
+            await launcher.StopAsync(CancellationToken.None);
+            _ = await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+                launcher.OpenSteamAsync(CancellationToken.None));
             Assert.True(own.HasExited);
             Assert.False(other.HasExited);
         }

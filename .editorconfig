@@ -12,13 +12,15 @@ trim_trailing_whitespace = true
 max_line_length = 120
 
 [*.cs]
+dotnet_diagnostic.IDE0045.severity = suggestion
+dotnet_diagnostic.IDE0046.severity = suggestion
+dotnet_diagnostic.IDE0063.severity = suggestion
 csharp_new_line_before_open_brace = all
 csharp_indent_case_contents_when_block = false
-# The FSD entry point uses a file-scoped namespace.
-csharp_style_prefer_top_level_statements = false:suggestion
 csharp_style_namespace_declarations = file_scoped:warning
 csharp_using_directive_placement = outside_namespace:warning
 csharp_prefer_braces = true:warning
+csharp_prefer_simple_using_statement = true:suggestion
 csharp_style_var_for_built_in_types = false:suggestion
 csharp_style_var_when_type_is_apparent = true:suggestion
 csharp_style_var_elsewhere = false:suggestion
@@ -27,6 +29,9 @@ resharper_csharp_for_built_in_types = use_explicit_type
 resharper_csharp_for_simple_types = use_var_when_evident
 resharper_csharp_for_other_types = use_var_when_evident
 csharp_use_roslyn_logic_for_evident_types = true
+# Keep parentheses consistent between Roslyn and Rider.
+dotnet_style_parentheses_in_arithmetic_binary_operators = always_for_clarity:suggestion
+dotnet_style_parentheses_in_other_binary_operators = always_for_clarity:suggestion
 dotnet_sort_system_directives_first = true
 dotnet_style_require_accessibility_modifiers = for_non_interface_members:warning
 

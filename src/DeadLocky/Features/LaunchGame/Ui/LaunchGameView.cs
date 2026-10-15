@@ -18,6 +18,7 @@ public sealed class LaunchGameView : NSStackView
         NSFontWeight.Regular, LauncherStyle.SecondaryText);
 
     private readonly NSTextField _error = LauncherStyle.Label("", 12, NSFontWeight.Regular, NSColor.SystemRed);
+    private readonly NSButton _emergencyQuit = LauncherStyle.Button("Emergency quit");
     private readonly NSWindow _owner;
     private readonly NSButton _play = LauncherStyle.Button("Play", true);
     private readonly IRuntimeSetup? _runtimeSetup;
@@ -27,6 +28,7 @@ public sealed class LaunchGameView : NSStackView
 #endif
     private readonly NSLayoutConstraint _setupWidth;
     private readonly NSTextField _title = LauncherStyle.Label("Ready when you are.", 14, NSFontWeight.Medium);
+    private string _profileSummary = "Ready to play on your Mac";
     private bool _disposed;
 #if DEBUG
     private bool _isTesting;
@@ -60,6 +62,10 @@ public sealed class LaunchGameView : NSStackView
         _error.LineBreakMode = NSLineBreakMode.ByWordWrapping;
         AddArrangedSubview(surface);
         AddArrangedSubview(_error);
+        _emergencyQuit.ContentTintColor = NSColor.SystemRed;
+        _emergencyQuit.ToolTip = "Force-stop Deadlock, Windows Steam and Wine in this launcher's prefix, then quit.";
+        AddArrangedSubview(_emergencyQuit);
+        _emergencyQuit.Activated += OnEmergencyQuit;
         NSLayoutConstraint.ActivateConstraints(
         [
             surface.WidthAnchor.ConstraintEqualTo(WidthAnchor),
@@ -87,7 +93,8 @@ public sealed class LaunchGameView : NSStackView
         Render();
     }
 
-    public bool IsActive => _controller.State.IsStarting || _controller.State.IsRunning;
+    public bool IsActive => _controller.State.IsStarting || _controller.State.IsRunning
+                                                         || _controller.State.EmergencyStopRequested;
 
     public event EventHandler? ActivityChanged;
 
@@ -109,6 +116,12 @@ public sealed class LaunchGameView : NSStackView
         return _controller.Configuration is not null;
     }
 
+    public void SetProfileSummary(string summary)
+    {
+        _profileSummary = summary;
+        Render();
+    }
+
     public void SetInstallation(string directory, bool ready, bool busy)
     {
         _controller.SetInstallation(directory, ready, busy);
@@ -124,6 +137,7 @@ public sealed class LaunchGameView : NSStackView
         {
             _disposed = true;
             _controller.StateChanged -= OnStateChanged;
+            _emergencyQuit.Activated -= OnEmergencyQuit;
             _play.Activated -= OnPlay;
             _setup.Activated -= OnSetup;
             _closeSteam.Activated -= OnCloseSteamChanged;
@@ -131,6 +145,17 @@ public sealed class LaunchGameView : NSStackView
         }
 
         base.Dispose(disposing);
+    }
+
+    private void OnEmergencyQuit(object? sender, EventArgs args)
+    {
+        _ = UiAction.RunAsync(_owner, async () =>
+        {
+            if (await _controller.EmergencyStopAsync())
+            {
+                NSApplication.SharedApplication.Terminate(_emergencyQuit);
+            }
+        });
     }
 
     private void OnPlay(object? sender, EventArgs args)
@@ -226,12 +251,15 @@ public sealed class LaunchGameView : NSStackView
         GameLaunchState state = _controller.State;
         _play.Title = state.IsRunning ? "Game running" : state.IsStarting ? "Starting…" : "Play";
         _play.Enabled = state.CanLaunch;
+        _emergencyQuit.Title = state.IsStopping ? "Stopping…" : "Emergency quit";
+        _emergencyQuit.Enabled = _controller.CanEmergencyStop && state is { IsStopping: false, IsConfiguring: false };
+        _closeSteam.Enabled = !state.EmergencyStopRequested;
         _title.StringValue = state.IsRunning ? "Enjoy the game."
             : state.IsStarting ? "Opening Deadlock…"
             : state.InstallationReady ? "Ready when you are." : "One step closer.";
         _detail.StringValue = _controller.Configuration is null
             ? "Set up GPTK to play on Mac"
-            : "Ready to play on your Mac";
+            : _profileSummary;
         _setup.Hidden = _controller.Configuration is not null;
         _setupWidth.Active = _setup.Hidden;
         _setup.Enabled = !IsActive && !state.IsConfiguring;

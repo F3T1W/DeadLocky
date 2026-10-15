@@ -16,6 +16,8 @@
         <string>en</string>
         <key>CFBundlePackageType</key>
         <string>APPL</string>
+        <key>NSMicrophoneUsageDescription</key>
+        <string>Deadlock uses your microphone for in-game voice chat.</string>
         <key>NSPrincipalClass</key>
         <string>NSApplication</string>
         <key>NSHighResolutionCapable</key>
