@@ -30,6 +30,12 @@ native Steam are not stopped. Keep DeadLocky open for monitoring and cleanup. Cl
 detaches monitoring and leaves the game running. Wine's blocking crash dialog is disabled in the
 configured prefix; this does not fix underlying game crashes.
 
+macOS may ask for microphone access under **DeadLocky** when Deadlock initializes voice chat
+or opens Settings. The request is attributed to the launcher because it starts Wine; choose whether
+to allow access in the system dialog. The app bundle declares `NSMicrophoneUsageDescription` so macOS
+can present that dialog. A missing purpose string caused a Settings hang on the development machine;
+adding it and granting microphone access resolved the hang during local testing.
+
 ## Architecture and checks
 
 The UML class diagram below uses [Mermaid](https://mermaid.js.org/), an open source diagram renderer.
