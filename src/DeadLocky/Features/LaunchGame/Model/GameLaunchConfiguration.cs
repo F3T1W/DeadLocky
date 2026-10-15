@@ -9,7 +9,10 @@ internal sealed record GameLaunchState(
     bool IsStarting = false,
     bool IsRunning = false,
     bool IsConfiguring = false,
-    string? Error = null)
+    string? Error = null,
+    bool EmergencyStopRequested = false,
+    bool IsStopping = false)
 {
-    public bool CanLaunch => InstallationReady && !PreparationBusy && !IsStarting && !IsRunning && !IsConfiguring;
+    public bool CanLaunch => InstallationReady && !PreparationBusy && !IsStarting && !IsRunning && !IsConfiguring
+                             && !EmergencyStopRequested;
 }

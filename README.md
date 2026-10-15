@@ -3,6 +3,12 @@
 Deadlock launcher for Apple Silicon Macs, using .NET 10 and native AppKit on macOS 14 or later.
 Release builds use NativeAOT; Debug builds keep the managed runtime for Rider debugging.
 
+The **Emergency quit** button cancels pending launches, force-stops Windows Steam, Deadlock and Wine
+in the configured prefix, then closes DeadLocky. Other Wine prefixes are left running.
+Use it when the game or runtime is stuck; unsaved progress may be lost. If cleanup fails,
+DeadLocky stays open, displays the error and allows another shutdown attempt. Starting new work
+is disabled once emergency shutdown has been requested.
+
 ## Set up and play
 
 The setup wizard appears when no valid game environment exists. Download Apple's GPTK evaluation

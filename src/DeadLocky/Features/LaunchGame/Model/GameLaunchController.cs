@@ -23,6 +23,38 @@ internal sealed class GameLaunchController(IGameLauncher launcher) : IDisposable
 
     public GameLaunchConfiguration? Configuration => launcher.Configuration;
 
+    public bool CanEmergencyStop => launcher is IEmergencyGameStopper;
+
+    public async Task<bool> EmergencyStopAsync()
+    {
+        lock (_sync)
+        {
+            if (_disposed || _state.IsStopping || _state.IsConfiguring || launcher is not IEmergencyGameStopper)
+            {
+                return false;
+            }
+
+            _state = _state with { EmergencyStopRequested = true, IsStopping = true, Error = null };
+            _session?.Dispose();
+        }
+
+        StateChanged?.Invoke(this, EventArgs.Empty);
+        try
+        {
+            await ((IEmergencyGameStopper)launcher).StopAsync(_lifetime.Token);
+            return true;
+        }
+        catch (OperationCanceledException) when (_disposed)
+        {
+            return false;
+        }
+        catch (Exception exception)
+        {
+            Update(state => state with { IsStopping = false, Error = exception.Message });
+            return false;
+        }
+    }
+
     public bool CloseSteamAfterExit => launcher is IGameExitPreferences { CloseSteamAfterExit: true };
 
     public void Dispose()
@@ -69,7 +101,8 @@ internal sealed class GameLaunchController(IGameLauncher launcher) : IDisposable
 
     public async Task CheckRunningAsync()
     {
-        if (State.IsRunning || State.IsStarting || State.IsConfiguring || string.IsNullOrEmpty(State.Directory))
+        if (State.IsRunning || State.IsStarting || State.IsConfiguring || State.EmergencyStopRequested
+            || string.IsNullOrEmpty(State.Directory))
         {
             return;
         }
@@ -82,7 +115,7 @@ internal sealed class GameLaunchController(IGameLauncher launcher) : IDisposable
                 await ObserveAsync(existing);
             }
         }
-        catch (OperationCanceledException) when (_disposed)
+        catch (OperationCanceledException) when (_disposed || State.EmergencyStopRequested)
         {
         }
         catch (Exception exception)
@@ -109,7 +142,7 @@ internal sealed class GameLaunchController(IGameLauncher launcher) : IDisposable
             IGameSession session = await launcher.LaunchAsync(State.Directory, _lifetime.Token);
             await ObserveAsync(session);
         }
-        catch (OperationCanceledException) when (_disposed)
+        catch (OperationCanceledException) when (_disposed || State.EmergencyStopRequested)
         {
         }
         catch (Exception exception)
@@ -126,7 +159,8 @@ internal sealed class GameLaunchController(IGameLauncher launcher) : IDisposable
     {
         lock (_sync)
         {
-            if (_disposed || _state.IsStarting || _state.IsRunning || _state.IsConfiguring)
+            if (_disposed || _state.IsStarting || _state.IsRunning || _state.IsConfiguring
+                || _state.EmergencyStopRequested)
             {
                 return;
             }
@@ -144,7 +178,7 @@ internal sealed class GameLaunchController(IGameLauncher launcher) : IDisposable
                 launcher.Configure(configuration);
             }
         }
-        catch (OperationCanceledException) when (_disposed)
+        catch (OperationCanceledException) when (_disposed || State.EmergencyStopRequested)
         {
         }
         catch (Exception exception)
@@ -161,12 +195,12 @@ internal sealed class GameLaunchController(IGameLauncher launcher) : IDisposable
     {
         try
         {
-            if (State is { IsRunning: false, IsStarting: false })
+            if (State is { IsRunning: false, IsStarting: false, EmergencyStopRequested: false })
             {
                 await launcher.OpenSteamAsync(_lifetime.Token);
             }
         }
-        catch (OperationCanceledException) when (_disposed)
+        catch (OperationCanceledException) when (_disposed || State.EmergencyStopRequested)
         {
         }
         catch (Exception exception)
@@ -179,7 +213,7 @@ internal sealed class GameLaunchController(IGameLauncher launcher) : IDisposable
     {
         lock (_sync)
         {
-            if (_disposed || _session is not null)
+            if (_disposed || _state.EmergencyStopRequested || _session is not null)
             {
                 session.Dispose();
                 return;

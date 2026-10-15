@@ -4,9 +4,12 @@ using DeadLocky.Features.LaunchGame.Model;
 
 namespace DeadLocky.Features.LaunchGame.Api;
 
-public sealed class GptkGameLauncher : IGameLauncher, IGameExitPreferences, IRuntimeSetupProvider
+public sealed class GptkGameLauncher : IGameLauncher, IGameExitPreferences, IRuntimeSetupProvider, IEmergencyGameStopper
 {
     private readonly GameExitPreferencesStore _preferences;
+    private readonly Lock _processStart = new();
+    private bool _emergencyStopRequested;
+    private readonly CancellationTokenSource _shutdown = new();
     private readonly SemaphoreSlim _start = new(1, 1);
     private readonly GptkConfigurationStore _store;
     private readonly string _storePath;
@@ -43,10 +46,13 @@ public sealed class GptkGameLauncher : IGameLauncher, IGameExitPreferences, IRun
 
     public async Task OpenSteamAsync(CancellationToken cancellationToken)
     {
+        using var operation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _shutdown.Token);
+        cancellationToken = operation.Token;
         cancellationToken.ThrowIfCancellationRequested();
         GameLaunchConfiguration configuration = ValidConfiguration();
         await PrepareCrashHandlingAsync(configuration, cancellationToken);
-        Task<int> command = StartSteam(configuration, false);
+        cancellationToken.ThrowIfCancellationRequested();
+        Task<int> command = StartSteam(configuration, false, cancellationToken);
         _ = await Task.WhenAny(command, Task.Delay(TimeSpan.FromSeconds(2), cancellationToken));
         cancellationToken.ThrowIfCancellationRequested();
         if (command.IsCompletedSuccessfully && command.Result != 0)
@@ -69,6 +75,8 @@ public sealed class GptkGameLauncher : IGameLauncher, IGameExitPreferences, IRun
 
     public async Task<IGameSession> LaunchAsync(string directory, CancellationToken cancellationToken)
     {
+        using var operation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _shutdown.Token);
+        cancellationToken = operation.Token;
         await _start.WaitAsync(cancellationToken);
         try
         {
@@ -85,7 +93,8 @@ public sealed class GptkGameLauncher : IGameLauncher, IGameExitPreferences, IRun
             }
 
             SteamInstallationLink.Register(GptkConfigurationStore.SteamExecutable(configuration), directory);
-            Task<int> command = StartSteam(configuration, true);
+            cancellationToken.ThrowIfCancellationRequested();
+            Task<int> command = StartSteam(configuration, true, cancellationToken);
             var deadline = Stopwatch.StartNew();
             while (deadline.Elapsed < TimeSpan.FromMinutes(2))
             {
@@ -112,8 +121,63 @@ public sealed class GptkGameLauncher : IGameLauncher, IGameExitPreferences, IRun
         }
     }
 
+    public async Task StopAsync(CancellationToken cancellationToken)
+    {
+        lock (_processStart)
+        {
+            _emergencyStopRequested = true;
+        }
+
+        await _shutdown.CancelAsync();
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        timeout.CancelAfter(TimeSpan.FromSeconds(20));
+        CancellationToken token = timeout.Token;
+        await _start.WaitAsync(token);
+        try
+        {
+            GameLaunchConfiguration? configuration = Configuration;
+            if (configuration is null)
+            {
+                return;
+            }
+
+            // Stop the prefix's server first so Wine clients cannot respawn each other.
+            string server = Path.Combine(Path.GetDirectoryName(configuration.WineExecutable)!, "wineserver");
+            if (File.Exists(server))
+            {
+                var stop = new ProcessStartInfo(server)
+                {
+                    UseShellExecute = false,
+                    Environment = { ["WINEPREFIX"] = configuration.PrefixDirectory }
+                };
+                stop.ArgumentList.Add("-k");
+                using Process process = Process.Start(stop) ?? throw new IOException("Unable to stop the GPTK prefix.");
+                try
+                {
+                    await process.WaitForExitAsync(token);
+                }
+                catch (OperationCanceledException)
+                {
+                    if (!process.HasExited)
+                    {
+                        process.Kill();
+                    }
+
+                    throw;
+                }
+            }
+
+            await Task.Run(() => MacGameProcessScanner.StopPrefixProcessesAsync(configuration, token), token);
+        }
+        finally
+        {
+            _ = _start.Release();
+        }
+    }
+
     public void Dispose()
     {
+        _shutdown.Dispose();
     }
 
     public IRuntimeSetup RuntimeSetup { get; }
@@ -142,6 +206,8 @@ public sealed class GptkGameLauncher : IGameLauncher, IGameExitPreferences, IRun
 
     public async Task DownloadWithSteamAsync(string directory, CancellationToken token)
     {
+        using var operation = CancellationTokenSource.CreateLinkedTokenSource(token, _shutdown.Token);
+        token = operation.Token;
         GameLaunchConfiguration configuration = ValidConfiguration();
         await PrepareCrashHandlingAsync(configuration, token);
         string executable = GptkConfigurationStore.SteamExecutable(configuration);
@@ -152,7 +218,8 @@ public sealed class GptkGameLauncher : IGameLauncher, IGameExitPreferences, IRun
         DateTime before = File.GetLastWriteTimeUtc(manifest);
         ProcessStartInfo start = CreateStartInfo(configuration, false);
         start.ArgumentList.Add("steam://install/1422450");
-        Process process = Process.Start(start) ?? throw new IOException("Unable to open Steam installation.");
+        token.ThrowIfCancellationRequested();
+        Process process = StartProcess(start, token) ?? throw new IOException("Unable to open Steam installation.");
         process.OutputDataReceived += static (_, _) => { };
         process.ErrorDataReceived += static (_, _) => { };
         process.BeginOutputReadLine();
@@ -190,7 +257,7 @@ public sealed class GptkGameLauncher : IGameLauncher, IGameExitPreferences, IRun
                 : Task.CompletedTask);
     }
 
-    private static async Task PrepareCrashHandlingAsync(GameLaunchConfiguration configuration, CancellationToken token)
+    private async Task PrepareCrashHandlingAsync(GameLaunchConfiguration configuration, CancellationToken token)
     {
         ProcessStartInfo start = CreateStartInfo(configuration, false);
         start.ArgumentList.Clear();
@@ -203,7 +270,7 @@ public sealed class GptkGameLauncher : IGameLauncher, IGameExitPreferences, IRun
             start.ArgumentList.Add(argument);
         }
 
-        using Process process = Process.Start(start)
+        using Process process = StartProcess(start, token)
                                 ?? throw new IOException("Unable to configure Wine crash handling.");
         Task output = process.StandardOutput.ReadToEndAsync(token);
         Task error = process.StandardError.ReadToEndAsync(token);
@@ -215,7 +282,7 @@ public sealed class GptkGameLauncher : IGameLauncher, IGameExitPreferences, IRun
         }
     }
 
-    private static async Task CloseSteamAfterGameAsync(GameLaunchConfiguration configuration, string directory,
+    private async Task CloseSteamAfterGameAsync(GameLaunchConfiguration configuration, string directory,
         CancellationToken token)
     {
         GptkConfigurationStore.Validate(configuration);
@@ -226,7 +293,8 @@ public sealed class GptkGameLauncher : IGameLauncher, IGameExitPreferences, IRun
 
         ProcessStartInfo shutdown = CreateStartInfo(configuration, false);
         shutdown.ArgumentList.Add("-shutdown");
-        using (Process process = Process.Start(shutdown) ?? throw new IOException("Unable to close Windows Steam."))
+        using (Process process = StartProcess(shutdown, token)
+                                 ?? throw new IOException("Unable to close Windows Steam."))
         {
             Task output = process.StandardOutput.ReadToEndAsync(token);
             Task error = process.StandardError.ReadToEndAsync(token);
@@ -267,15 +335,26 @@ public sealed class GptkGameLauncher : IGameLauncher, IGameExitPreferences, IRun
         }
     }
 
-    private static Task<int> StartSteam(GameLaunchConfiguration configuration, bool launchGame)
+    private Task<int> StartSteam(GameLaunchConfiguration configuration, bool launchGame, CancellationToken token)
     {
         ProcessStartInfo start = CreateStartInfo(configuration, launchGame);
-        Process process = Process.Start(start) ?? throw new IOException("Unable to start GPTK.");
+        Process process = StartProcess(start, token) ?? throw new IOException("Unable to start GPTK.");
         process.OutputDataReceived += static (_, _) => { };
         process.ErrorDataReceived += static (_, _) => { };
         process.BeginOutputReadLine();
         process.BeginErrorReadLine();
         return WaitForCommandAsync(process);
+    }
+
+    private Process? StartProcess(ProcessStartInfo start, CancellationToken token)
+    {
+        lock (_processStart)
+        {
+            token.ThrowIfCancellationRequested();
+            return _emergencyStopRequested
+                ? throw new OperationCanceledException("Emergency shutdown has been requested.")
+                : Process.Start(start);
+        }
     }
 
     private static async Task<int> WaitForCommandAsync(Process process)
