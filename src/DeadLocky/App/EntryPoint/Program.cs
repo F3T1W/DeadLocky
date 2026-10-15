@@ -1,12 +1,6 @@
-namespace DeadLocky.App.EntryPoint;
+using DeadLocky.App.EntryPoint;
 
-internal static class Program
-{
-    private static void Main(string[] args)
-    {
-        NSApplication.Init();
-        using var appDelegate = new AppDelegate();
-        NSApplication.SharedApplication.Delegate = appDelegate;
-        NSApplication.Main(args);
-    }
-}
+NSApplication.Init();
+using var appDelegate = new AppDelegate();
+NSApplication.SharedApplication.Delegate = appDelegate;
+NSApplication.Main(args);

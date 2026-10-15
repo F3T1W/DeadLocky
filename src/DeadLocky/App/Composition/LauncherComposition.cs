@@ -33,7 +33,8 @@ internal static class LauncherComposition
     {
         public LauncherServices(string configuration, string modsRoot)
         {
-            Launcher = new GptkGameLauncher(configuration, (directory, token) => Workspace!.ApplyAsync(directory, token));
+            Launcher = new GptkGameLauncher(configuration,
+                (directory, token) => Workspace!.ApplyAsync(directory, token));
             Workspace = new ModWorkspace(modsRoot, Launcher.EnsureGameFilesIdle);
         }
 

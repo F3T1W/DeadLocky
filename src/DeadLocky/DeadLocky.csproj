@@ -10,6 +10,10 @@
     <NoDSymUtil Condition="'$(PublishAot)' == 'true'">true</NoDSymUtil>
     <ApplicationId>org.milkdeadlockdry.launcher</ApplicationId>
   </PropertyGroup>
+  <ItemGroup Condition="'$(TargetFramework)' == 'net10.0-macos'">
+    <BundleResource Include="../../docs/ThirdPartyNotices.txt" LogicalName="ThirdPartyNotices.txt"/>
+    <BundleResource Include="../../LICENSE" LogicalName="LICENSE"/>
+  </ItemGroup>
   <ItemGroup Condition="'$(TargetFramework)' == 'net10.0'">
     <Compile Remove="App/**/*.cs;Pages/**/*.cs;Features/*/Ui/**/*.cs;Shared/Ui/**/*.cs"/>
     <Compile Remove="Shared/Api/Directories/AppKitDirectoryPicker.cs"/>

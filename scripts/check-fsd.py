@@ -37,10 +37,14 @@ for folder in PROJECT_ROOT.iterdir():
             continue
         text = source.read_text()
         namespace = re.search(r"^namespace\s+([\w.]+)\s*;", text, re.MULTILINE)
-        if not namespace:
+        if namespace:
+            owner = namespace.group(1).split(".")
+        elif source == PROJECT_ROOT / "App" / "EntryPoint" / "Program.cs":
+            # C# top-level statements cannot be wrapped in a namespace. Imports still obey App rules.
+            owner = ["DeadLocky", "App", "EntryPoint"]
+        else:
             errors.append(f"Missing file-scoped namespace: {source.relative_to(ROOT)}")
             continue
-        owner = namespace.group(1).split(".")
         if len(owner) < 2 or owner[:2] != ["DeadLocky", folder.name]:
             errors.append(f"Namespace does not match layer: {source.relative_to(ROOT)}")
             continue

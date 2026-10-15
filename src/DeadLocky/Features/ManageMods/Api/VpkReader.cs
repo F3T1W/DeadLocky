@@ -86,12 +86,9 @@ internal static class VpkReader
             }
         }
 
-        if (resources.Count == 0 || stream.Position != end)
-        {
-            throw new IOException("The VPK contains no resources or an invalid directory terminator.");
-        }
-
-        return new VpkContents([.. resources], [.. parts], entries);
+        return resources.Count == 0 || stream.Position != end
+            ? throw new IOException("The VPK contains no resources or an invalid directory terminator.")
+            : new VpkContents([.. resources], [.. parts], entries);
 
         string ReadString()
         {
@@ -101,7 +98,7 @@ internal static class VpkReader
                 byte next = reader.ReadByte();
                 if (next == 0)
                 {
-                    return Encoding.UTF8.GetString(bytes.ToArray());
+                    return Encoding.UTF8.GetString([.. bytes]);
                 }
 
                 bytes.Add(next);

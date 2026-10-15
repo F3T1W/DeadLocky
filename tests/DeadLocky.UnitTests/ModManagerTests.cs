@@ -24,7 +24,7 @@ public sealed class ModManagerTests : IDisposable
 
     public void Dispose()
     {
-        foreach (ModWorkspace workspace in _workspaces)
+        foreach (var workspace in _workspaces)
         {
             workspace.DisposeAsync().AsTask().GetAwaiter().GetResult();
         }
@@ -38,14 +38,14 @@ public sealed class ModManagerTests : IDisposable
     [Fact]
     public async Task VanillaIsPermanentAndProfilesPersistAcrossRestart()
     {
-        ModWorkspace workspace = Workspace();
+        var workspace = Workspace();
         Assert.True(workspace.Read().ActiveProfile.IsVanilla);
         _ = await Assert.ThrowsAsync<IOException>(() =>
             workspace.RenameProfileAsync(Guid.Empty, "Changed", CancellationToken.None));
         _ = await Assert.ThrowsAsync<IOException>(() =>
             workspace.SetEnabledAsync(Guid.Empty, Guid.NewGuid(), true, CancellationToken.None));
         await workspace.CreateProfileAsync("  My profile  ", CancellationToken.None);
-        Guid id = workspace.Read().ActiveProfileId;
+        var id = workspace.Read().ActiveProfileId;
         await workspace.RenameProfileAsync(id, "Custom", CancellationToken.None);
         Assert.Equal("Custom", Workspace().Read().ActiveProfile.Name);
         Assert.Equal(id, Workspace().Read().ActiveProfileId);
@@ -60,11 +60,11 @@ public sealed class ModManagerTests : IDisposable
     [Fact]
     public async Task ModMembershipAndEnablementAreIndependentAcrossProfiles()
     {
-        ModWorkspace workspace = Workspace();
+        var workspace = Workspace();
         await workspace.CreateProfileAsync("First", CancellationToken.None);
-        Guid first = workspace.Read().ActiveProfileId;
+        var first = workspace.Read().ActiveProfileId;
         await InstallAsync(workspace, "1", "First skin");
-        Guid package = workspace.Read().Packages.Single().Id;
+        var package = workspace.Read().Packages.Single().Id;
         await workspace.CreateProfileAsync("Second", CancellationToken.None);
         Assert.Empty(workspace.Read().ActiveProfile.Mods);
         await InstallAsync(workspace, "2", "Second skin", "different");
@@ -83,7 +83,7 @@ public sealed class ModManagerTests : IDisposable
         string game = Game();
         string foreign = Path.Combine(game, "game", "citadel", "unrelated.vpk");
         await File.WriteAllTextAsync(foreign, "keep");
-        ModWorkspace workspace = Workspace();
+        var workspace = Workspace();
         await workspace.CreateProfileAsync("Modded", CancellationToken.None);
         await InstallAsync(workspace, "1", "Skin");
         await workspace.ApplyAsync(game, CancellationToken.None);
@@ -127,11 +127,11 @@ public sealed class ModManagerTests : IDisposable
     public async Task ConflictingModsAreRejectedWithoutChangingTheGame()
     {
         string game = Game();
-        ModWorkspace workspace = Workspace();
+        var workspace = Workspace();
         await workspace.CreateProfileAsync("Conflicts", CancellationToken.None);
         await InstallAsync(workspace, "1", "First");
         await InstallAsync(workspace, "2", "Second", dataValue: 43);
-        IOException error =
+        var error =
             await Assert.ThrowsAsync<IOException>(() => workspace.ApplyAsync(game, CancellationToken.None));
         Assert.Contains("Mod conflict", error.Message);
         Assert.Equal(GameInfo, await File.ReadAllTextAsync(Config(game)));
@@ -142,7 +142,7 @@ public sealed class ModManagerTests : IDisposable
     public async Task IdenticalSharedGameResourcesDoNotBlockDeployment()
     {
         string game = Game();
-        ModWorkspace workspace = Workspace();
+        var workspace = Workspace();
         await workspace.CreateProfileAsync("Shared", CancellationToken.None);
         await InstallAsync(workspace, "1", "First");
         await InstallAsync(workspace, "2", "Second");
@@ -158,7 +158,7 @@ public sealed class ModManagerTests : IDisposable
     [InlineData(false)]
     public async Task SelectedVpkFilesCanShareContentButRejectDifferentVariants(bool identical)
     {
-        ModWorkspace workspace = Workspace();
+        var workspace = Workspace();
         await workspace.CreateProfileAsync("Variants", CancellationToken.None);
         var id = Guid.NewGuid();
         string content = Path.Combine(_root, "Library", "Downloads", id.ToString("N"), "Content");
@@ -171,7 +171,7 @@ public sealed class ModManagerTests : IDisposable
         var prepared = new PreparedMod(id, content, ["first.vpk", "second.vpk"]);
         var mod = new CatalogMod { RemoteId = "1", Name = "Shared assets" };
         var download = new ModDownload("https://example.com/mod.zip", 0, "mod.zip", null, null);
-        Task install = workspace.InstallAsync(workspace.Read().ActiveProfileId, mod, download, prepared,
+        var install = workspace.InstallAsync(workspace.Read().ActiveProfileId, mod, download, prepared,
             prepared.Roots, CancellationToken.None);
         if (identical)
         {
@@ -189,7 +189,7 @@ public sealed class ModManagerTests : IDisposable
     public async Task RunningGameOrSteamUpdatePreventsAllGameWrites()
     {
         string game = Game();
-        ModWorkspace workspace = Workspace(static _ => throw new IOException("Game busy"));
+        var workspace = Workspace(static _ => throw new IOException("Game busy"));
         await workspace.CreateProfileAsync("Pending", CancellationToken.None);
         await InstallAsync(workspace, "1", "Skin");
         _ = await Assert.ThrowsAsync<IOException>(() => workspace.ApplyAsync(game, CancellationToken.None));
@@ -201,7 +201,7 @@ public sealed class ModManagerTests : IDisposable
     public async Task ChangedInstalledFilesAndUnmanagedFoldersAreNeverDeleted()
     {
         string game = Game();
-        ModWorkspace workspace = Workspace();
+        var workspace = Workspace();
         await workspace.CreateProfileAsync("Modded", CancellationToken.None);
         await InstallAsync(workspace, "1", "Skin");
         await workspace.ApplyAsync(game, CancellationToken.None);
@@ -222,7 +222,7 @@ public sealed class ModManagerTests : IDisposable
     public async Task InterruptedFirstDeploymentRollsBackAndPreservesLaterSteamChanges()
     {
         string game = Game();
-        ModWorkspace workspace = Workspace();
+        var workspace = Workspace();
         await workspace.CreateProfileAsync("Modded", CancellationToken.None);
         await InstallAsync(workspace, "1", "Skin");
         await workspace.ApplyAsync(game, CancellationToken.None);
@@ -241,10 +241,10 @@ public sealed class ModManagerTests : IDisposable
     public async Task CacheCorruptionStopsDeploymentBeforeConfigurationChanges()
     {
         string game = Game();
-        ModWorkspace workspace = Workspace();
+        var workspace = Workspace();
         await workspace.CreateProfileAsync("Modded", CancellationToken.None);
         await InstallAsync(workspace, "1", "Skin");
-        InstalledMod package = workspace.Read().Packages.Single();
+        var package = workspace.Read().Packages.Single();
         await File.AppendAllTextAsync(Path.Combine(_root, "Library", "Packages", package.Id.ToString("N"), "skin.vpk"),
             "changed");
         _ = await Assert.ThrowsAsync<IOException>(() => workspace.ApplyAsync(game, CancellationToken.None));
@@ -261,9 +261,9 @@ public sealed class ModManagerTests : IDisposable
     {
         _ = Directory.CreateDirectory(_root);
         string zip = Path.Combine(_root, "bad.zip");
-        await using (ZipArchive archive = await ZipFile.OpenAsync(zip, ZipArchiveMode.Create))
+        await using (var archive = await ZipFile.OpenAsync(zip, ZipArchiveMode.Create))
         {
-            await using Stream target = await archive.CreateEntry(entry).OpenAsync();
+            await using var target = await archive.CreateEntry(entry).OpenAsync();
             await target.WriteAsync(Vpk("test"));
         }
 
@@ -277,11 +277,11 @@ public sealed class ModManagerTests : IDisposable
     {
         _ = Directory.CreateDirectory(_root);
         string zip = Path.Combine(_root, "variants.zip");
-        await using (ZipArchive archive = await ZipFile.OpenAsync(zip, ZipArchiveMode.Create))
+        await using (var archive = await ZipFile.OpenAsync(zip, ZipArchiveMode.Create))
         {
             foreach (string name in new[] { "Red/skin.vpk", "Blue/skin.vpk", "setup.exe" })
             {
-                await using Stream target = await archive.CreateEntry(name).OpenAsync();
+                await using var target = await archive.CreateEntry(name).OpenAsync();
                 await target.WriteAsync(Vpk("test"));
             }
         }
@@ -315,7 +315,7 @@ public sealed class ModManagerTests : IDisposable
         string path = Path.Combine(_root, "skin.vpk");
         File.WriteAllBytes(path, VpkEntries(("README.txt", 0x7FFF, 0), (repeated, 0x7FFF, 0),
             ("materials/skin.vmat_c", 0x7FFF, 1)));
-        VpkContents contents = VpkReader.Read(path);
+        var contents = VpkReader.Read(path);
         Assert.Equal(2, contents.Resources.Length);
         Assert.Contains("materials/skin.vmat_c", contents.Resources);
     }
@@ -327,7 +327,7 @@ public sealed class ModManagerTests : IDisposable
         string path = Path.Combine(_root, "skin.vpk");
         File.WriteAllBytes(path, VpkEntries(("materials/skin.vmat_c", 0x7FFF, 1),
             ("materials/SKIN.vmat_c", 0x7FFF, 1)));
-        IOException error = Assert.Throws<IOException>(() => VpkReader.Read(path));
+        var error = Assert.Throws<IOException>(() => VpkReader.Read(path));
         Assert.Contains("Duplicate resource", error.Message);
     }
 
@@ -337,7 +337,7 @@ public sealed class ModManagerTests : IDisposable
         _ = Directory.CreateDirectory(_root);
         string path = Path.Combine(_root, "skin.vpk");
         File.WriteAllBytes(path, VpkEntries(("README.txt", 0x7FFF, 0), ("README.txt", 0x7FFF, 2)));
-        IOException error = Assert.Throws<IOException>(() => VpkReader.Read(path));
+        var error = Assert.Throws<IOException>(() => VpkReader.Read(path));
         Assert.Contains("Missing or incomplete VPK data", error.Message);
     }
 
@@ -345,7 +345,7 @@ public sealed class ModManagerTests : IDisposable
     public async Task SharedRootDocumentationDoesNotConflictBetweenMods()
     {
         string game = Game();
-        ModWorkspace workspace = Workspace();
+        var workspace = Workspace();
         await workspace.CreateProfileAsync("Skins", CancellationToken.None);
         await InstallAsync(workspace, "1", "First", "first", true);
         await InstallAsync(workspace, "2", "Second", "second", true);
@@ -366,7 +366,7 @@ public sealed class ModManagerTests : IDisposable
             new() { Name = "Ivy sound", Hero = "Ivy", Category = "Sounds" },
             new() { Name = "Adult Ivy", Hero = "Ivy", Category = "Skins", IsNsfw = true }
         ];
-        CatalogMod[] result = new ModQuery("ivy", "Skins", "Ivy", 1).Filter(mods);
+        var result = new ModQuery("ivy", "Skins", "Ivy", 1).Filter(mods);
         Assert.Equal(["Red Ivy", "Blue Ivy"], result.Select(static mod => mod.Name));
         _ = Assert.Single(new ModQuery("alice").Filter(mods));
         Assert.Equal(4, new ModQuery(IncludeNsfw: true).Filter(mods).Length);
@@ -396,7 +396,7 @@ public sealed class ModManagerTests : IDisposable
     public async Task OlderPackageMetadataWithoutDependencyFieldStillApplies()
     {
         string game = Game();
-        ModWorkspace workspace = Workspace();
+        var workspace = Workspace();
         await workspace.CreateProfileAsync("Existing", CancellationToken.None);
         await InstallAsync(workspace, "1", "Skin");
         string path = Path.Combine(_root, "Library", "library.json");
@@ -467,11 +467,11 @@ public sealed class ModManagerTests : IDisposable
         using var tree = new MemoryStream();
         using (var writer = new BinaryWriter(tree, Encoding.UTF8, true))
         {
-            foreach (IGrouping<string, (string Path, ushort Archive, uint Length)> extension in
+            foreach (var extension in
                      entries.GroupBy(static entry => Path.GetExtension(entry.Path)[1..]))
             {
                 writer.Write(Encoding.UTF8.GetBytes(extension.Key + "\0"));
-                foreach (IGrouping<string?, (string Path, ushort Archive, uint Length)> directory in
+                foreach (var directory in
                          extension.GroupBy(static entry => Path.GetDirectoryName(entry.Path)))
                 {
                     writer.Write(Encoding.UTF8.GetBytes(
@@ -502,7 +502,7 @@ public sealed class ModManagerTests : IDisposable
         header.Write(1u);
         header.Write((uint)tree.Length);
         header.Write(tree.ToArray());
-        if (entries.Any(static entry => entry.Archive == 0x7FFF && entry.Length > 0))
+        if (entries.Any(static entry => entry is { Archive: 0x7FFF, Length: > 0 }))
         {
             header.Write((byte)42);
         }

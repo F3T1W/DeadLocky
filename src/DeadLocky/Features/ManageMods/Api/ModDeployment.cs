@@ -23,8 +23,11 @@ internal sealed class ModDeployment(string root, Action<string> ensureGameIdle)
 
         string owned = Path.Combine(citadel, "DeadLockyAddons");
         ValidateOwnedDirectory(owned);
-        InstalledMod[] enabled = [.. library.ActiveProfile.Mods.Where(static mod => mod.Enabled)
-            .Select(mod => library.Packages.Single(package => package.Id == mod.PackageId))];
+        InstalledMod[] enabled =
+        [
+            .. library.ActiveProfile.Mods.Where(static mod => mod.Enabled)
+                .Select(mod => library.Packages.Single(package => package.Id == mod.PackageId))
+        ];
         string[] enabledIds = [.. enabled.Select(static package => package.RemoteId)];
         foreach (InstalledMod package in enabled)
         {
@@ -120,12 +123,9 @@ internal sealed class ModDeployment(string root, Action<string> ensureGameIdle)
                         string source = Path.Combine(root, "Packages", package.Id.ToString("N"),
                             ModFiles.SafeRelativePath(name));
                         ModFiles.RequireRegularPath(source);
-                        if (!File.Exists(source) || ModFiles.Hash(source) != hash)
-                        {
-                            throw new IOException($"The cached files for {package.Name} changed. Reinstall the mod.");
-                        }
-
-                        return source;
+                        return !File.Exists(source) || ModFiles.Hash(source) != hash
+                            ? throw new IOException($"The cached files for {package.Name} changed. Reinstall the mod.")
+                            : source;
                     }
                 }
 

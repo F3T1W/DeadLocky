@@ -6,7 +6,7 @@ internal sealed record ModResourceConflict(string Resource, string FirstMod, str
 
 internal sealed class ModResourceConflicts(CancellationToken token, bool mergeImageLists = false)
 {
-    private readonly Dictionary<(string Archive, string Resource), string> _hashes = new();
+    private readonly Dictionary<(string Archive, string Resource), string> _hashes = [];
     private readonly Dictionary<string, VpkContents> _indexes = new(StringComparer.Ordinal);
     private readonly Dictionary<string, (string Name, string Archive)> _owners = new(StringComparer.OrdinalIgnoreCase);
 

@@ -9,6 +9,17 @@ Use it when the game or runtime is stuck; unsaved progress may be lost. If clean
 DeadLocky stays open, displays the error and allows another shutdown attempt. Starting new work
 is disabled once emergency shutdown has been requested.
 
+## Install the app
+
+Open the Apple Silicon DMG, drag **DeadLocky.app** to **Applications**, eject the
+image and open the installed copy. The app includes its native code; users do not
+need .NET, Rider or Xcode. An ad hoc build is not notarized and macOS may block its
+first launch; see [installation instructions](docs/Install.md).
+
+For maintainers, `bash scripts/create-dmg.sh` builds and verifies the image plus a
+SHA-256 checksum under `artifacts/Releases`. See [release instructions](docs/Releasing.md)
+for checks, Developer ID signing and optional notarization.
+
 ## Set up and play
 
 The setup wizard appears when no valid game environment exists. Download Apple's GPTK evaluation
@@ -61,10 +72,8 @@ A profile currently supports up to 99 enabled VPK indexes.
 
 Mods are staged under `~/Library/Application Support/DeadLocky/Mods` and deployed only to
 `game/citadel/DeadLockyAddons`. The launcher adds its own search path to the current `gameinfo.gi`, keeping the base
-game's
-`Mod` and `Write` paths so default keybindings and settings remain available.
-Returning to Vanilla removes the owned configuration entries and DeadLocky's files. Files installed by other tools are
-not
+game's `Mod` and `Write` paths so default keybindings and settings remain available.
+Returning to Vanilla removes the owned configuration entries and DeadLocky's files. Files installed by other tools are not
 part of the clean-profile guarantee. A persisted transaction journal recovers interrupted deployments;
 changed or foreign files block cleanup instead of being deleted. Current Steam metadata and the game
 process are checked before game-file writes, and Steam configuration changes are preserved during recovery.
@@ -204,3 +213,9 @@ from [Gcenx](https://github.com/Gcenx/game-porting-toolkit/releases/tag/Game-Por
 its Wine 7 DLLs are not copied over Wine 11. Steam comes from [Valve](https://store.steampowered.com/about/).
 Apple graphics are supplied by the user under Apple's terms. Redistributing runtime components requires
 review of their licenses; the launcher does not redistribute Apple's download.
+
+## License
+
+DeadLocky is [MIT-licensed](LICENSE). Dependency licenses and notices are included
+in [ThirdPartyNotices.txt](docs/ThirdPartyNotices.txt) and in the app bundle.
+Steam, Deadlock, GPTK, Wine and downloaded mods retain their own terms.

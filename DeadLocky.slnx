@@ -5,12 +5,17 @@
   <Folder Name="/Solution Items/docs/">
     <File Path="docs/fsd-architecture.md"/>
     <File Path="docs/learning-route.md"/>
+    <File Path="docs/Install.md"/>
+    <File Path="docs/Releasing.md"/>
+    <File Path="docs/ThirdPartyNotices.txt"/>
+    <File Path="LICENSE"/>
     <File Path="README.md"/>
   </Folder>
   <Folder Name="/Solution Items/scripts/">
     <File Path="scripts/check-fsd.py"/>
     <File Path="scripts/setup-macos.sh"/>
     <File Path="scripts/publish-native.sh"/>
+    <File Path="scripts/create-dmg.sh"/>
   </Folder>
   <Folder Name="/src/">
     <Project Path="src\DeadLocky\DeadLocky.csproj"/>

@@ -19,7 +19,7 @@ internal static class VpkResourceHash
             byte[] bytes = new byte[(int)size];
             entry.Preload.CopyTo(bytes, 0);
             stream.ReadExactly(bytes.AsSpan(entry.Preload.Length));
-            return TextureFingerprint(bytes) ?? "RAW:" + Convert.ToHexString(SHA256.HashData(bytes));
+            return TextureFingerprint(bytes) ?? ("RAW:" + Convert.ToHexString(SHA256.HashData(bytes)));
         }
 
         using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);

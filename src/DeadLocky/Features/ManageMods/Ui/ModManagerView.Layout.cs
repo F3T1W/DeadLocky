@@ -27,42 +27,95 @@ public sealed partial class ModManagerView
         AddSubview(sidebar);
         AddSubview(catalog);
         foreach (NSView view in new NSView[]
-        {
-            heading,
-            _profiles,
-            _create,
-            _rename,
-            _profileSummary,
-            library
-        }
-
-        )
+                 {
+                     heading,
+                     _profiles,
+                     _create,
+                     _rename,
+                     _profileSummary,
+                     library
+                 }
+                )
         {
             sidebar.AddSubview(view);
         }
 
         foreach (NSView view in new NSView[]
-        {
-            storeTitle,
-            _refresh,
-            _search,
-            _categories,
-            _heroes,
-            _sort,
-            _nsfw,
-            results,
-            _previous,
-            _next,
-            _pageLabel,
-            _status
-        }
-
-        )
+                 {
+                     storeTitle,
+                     _refresh,
+                     _search,
+                     _categories,
+                     _heroes,
+                     _sort,
+                     _nsfw,
+                     results,
+                     _previous,
+                     _next,
+                     _pageLabel,
+                     _status
+                 }
+                )
         {
             catalog.AddSubview(view);
         }
 
-        NSLayoutConstraint.ActivateConstraints([sidebar.LeadingAnchor.ConstraintEqualTo(LeadingAnchor), sidebar.TopAnchor.ConstraintEqualTo(TopAnchor), sidebar.BottomAnchor.ConstraintEqualTo(BottomAnchor), sidebar.WidthAnchor.ConstraintEqualTo(264), catalog.LeadingAnchor.ConstraintEqualTo(sidebar.TrailingAnchor, 28), catalog.TrailingAnchor.ConstraintEqualTo(TrailingAnchor), catalog.TopAnchor.ConstraintEqualTo(TopAnchor), catalog.BottomAnchor.ConstraintEqualTo(BottomAnchor), heading.TopAnchor.ConstraintEqualTo(sidebar.TopAnchor, 4), heading.LeadingAnchor.ConstraintEqualTo(sidebar.LeadingAnchor), _profiles.TopAnchor.ConstraintEqualTo(heading.BottomAnchor, 18), _profiles.LeadingAnchor.ConstraintEqualTo(sidebar.LeadingAnchor), _profiles.TrailingAnchor.ConstraintEqualTo(sidebar.TrailingAnchor), _create.TopAnchor.ConstraintEqualTo(_profiles.BottomAnchor, 10), _create.LeadingAnchor.ConstraintEqualTo(sidebar.LeadingAnchor), _rename.TrailingAnchor.ConstraintEqualTo(sidebar.TrailingAnchor), _rename.CenterYAnchor.ConstraintEqualTo(_create.CenterYAnchor), _profileSummary.TopAnchor.ConstraintEqualTo(_create.BottomAnchor, 14), _profileSummary.LeadingAnchor.ConstraintEqualTo(sidebar.LeadingAnchor), _profileSummary.TrailingAnchor.ConstraintEqualTo(sidebar.TrailingAnchor), _profileSummary.HeightAnchor.ConstraintEqualTo(36), library.TopAnchor.ConstraintEqualTo(_profileSummary.BottomAnchor, 14), library.LeadingAnchor.ConstraintEqualTo(sidebar.LeadingAnchor), library.TrailingAnchor.ConstraintEqualTo(sidebar.TrailingAnchor), library.BottomAnchor.ConstraintEqualTo(sidebar.BottomAnchor), storeTitle.TopAnchor.ConstraintEqualTo(catalog.TopAnchor), storeTitle.LeadingAnchor.ConstraintEqualTo(catalog.LeadingAnchor), _refresh.TrailingAnchor.ConstraintEqualTo(catalog.TrailingAnchor), _refresh.CenterYAnchor.ConstraintEqualTo(storeTitle.CenterYAnchor), _search.TopAnchor.ConstraintEqualTo(storeTitle.BottomAnchor, 16), _search.LeadingAnchor.ConstraintEqualTo(catalog.LeadingAnchor), _search.TrailingAnchor.ConstraintEqualTo(catalog.TrailingAnchor), _search.HeightAnchor.ConstraintEqualTo(32), _categories.TopAnchor.ConstraintEqualTo(_search.BottomAnchor, 10), _categories.LeadingAnchor.ConstraintEqualTo(catalog.LeadingAnchor), _heroes.LeadingAnchor.ConstraintEqualTo(_categories.TrailingAnchor, 8), _heroes.WidthAnchor.ConstraintEqualTo(_categories.WidthAnchor), _heroes.CenterYAnchor.ConstraintEqualTo(_categories.CenterYAnchor), _sort.LeadingAnchor.ConstraintEqualTo(_heroes.TrailingAnchor, 8), _sort.TrailingAnchor.ConstraintEqualTo(catalog.TrailingAnchor), _sort.WidthAnchor.ConstraintEqualTo(_categories.WidthAnchor), _sort.CenterYAnchor.ConstraintEqualTo(_categories.CenterYAnchor), _nsfw.TopAnchor.ConstraintEqualTo(_categories.BottomAnchor, 8), _nsfw.LeadingAnchor.ConstraintEqualTo(catalog.LeadingAnchor), results.TopAnchor.ConstraintEqualTo(_nsfw.BottomAnchor, 12), results.LeadingAnchor.ConstraintEqualTo(catalog.LeadingAnchor), results.TrailingAnchor.ConstraintEqualTo(catalog.TrailingAnchor), results.BottomAnchor.ConstraintEqualTo(_previous.TopAnchor, -12), _previous.LeadingAnchor.ConstraintEqualTo(catalog.LeadingAnchor), _previous.BottomAnchor.ConstraintEqualTo(_status.TopAnchor, -10), _next.TrailingAnchor.ConstraintEqualTo(catalog.TrailingAnchor), _next.CenterYAnchor.ConstraintEqualTo(_previous.CenterYAnchor), _pageLabel.CenterXAnchor.ConstraintEqualTo(catalog.CenterXAnchor), _pageLabel.CenterYAnchor.ConstraintEqualTo(_previous.CenterYAnchor), _status.BottomAnchor.ConstraintEqualTo(catalog.BottomAnchor), _status.LeadingAnchor.ConstraintEqualTo(catalog.LeadingAnchor), _status.TrailingAnchor.ConstraintEqualTo(catalog.TrailingAnchor), _status.HeightAnchor.ConstraintEqualTo(48)]);
+        NSLayoutConstraint.ActivateConstraints([
+            sidebar.LeadingAnchor.ConstraintEqualTo(LeadingAnchor), sidebar.TopAnchor.ConstraintEqualTo(TopAnchor),
+            sidebar.BottomAnchor.ConstraintEqualTo(BottomAnchor), sidebar.WidthAnchor.ConstraintEqualTo(264),
+            catalog.LeadingAnchor.ConstraintEqualTo(sidebar.TrailingAnchor, 28),
+            catalog.TrailingAnchor.ConstraintEqualTo(TrailingAnchor), catalog.TopAnchor.ConstraintEqualTo(TopAnchor),
+            catalog.BottomAnchor.ConstraintEqualTo(BottomAnchor),
+            heading.TopAnchor.ConstraintEqualTo(sidebar.TopAnchor, 4),
+            heading.LeadingAnchor.ConstraintEqualTo(sidebar.LeadingAnchor),
+            _profiles.TopAnchor.ConstraintEqualTo(heading.BottomAnchor, 18),
+            _profiles.LeadingAnchor.ConstraintEqualTo(sidebar.LeadingAnchor),
+            _profiles.TrailingAnchor.ConstraintEqualTo(sidebar.TrailingAnchor),
+            _create.TopAnchor.ConstraintEqualTo(_profiles.BottomAnchor, 10),
+            _create.LeadingAnchor.ConstraintEqualTo(sidebar.LeadingAnchor),
+            _rename.TrailingAnchor.ConstraintEqualTo(sidebar.TrailingAnchor),
+            _rename.CenterYAnchor.ConstraintEqualTo(_create.CenterYAnchor),
+            _profileSummary.TopAnchor.ConstraintEqualTo(_create.BottomAnchor, 14),
+            _profileSummary.LeadingAnchor.ConstraintEqualTo(sidebar.LeadingAnchor),
+            _profileSummary.TrailingAnchor.ConstraintEqualTo(sidebar.TrailingAnchor),
+            _profileSummary.HeightAnchor.ConstraintEqualTo(36),
+            library.TopAnchor.ConstraintEqualTo(_profileSummary.BottomAnchor, 14),
+            library.LeadingAnchor.ConstraintEqualTo(sidebar.LeadingAnchor),
+            library.TrailingAnchor.ConstraintEqualTo(sidebar.TrailingAnchor),
+            library.BottomAnchor.ConstraintEqualTo(sidebar.BottomAnchor),
+            storeTitle.TopAnchor.ConstraintEqualTo(catalog.TopAnchor),
+            storeTitle.LeadingAnchor.ConstraintEqualTo(catalog.LeadingAnchor),
+            _refresh.TrailingAnchor.ConstraintEqualTo(catalog.TrailingAnchor),
+            _refresh.CenterYAnchor.ConstraintEqualTo(storeTitle.CenterYAnchor),
+            _search.TopAnchor.ConstraintEqualTo(storeTitle.BottomAnchor, 16),
+            _search.LeadingAnchor.ConstraintEqualTo(catalog.LeadingAnchor),
+            _search.TrailingAnchor.ConstraintEqualTo(catalog.TrailingAnchor),
+            _search.HeightAnchor.ConstraintEqualTo(32),
+            _categories.TopAnchor.ConstraintEqualTo(_search.BottomAnchor, 10),
+            _categories.LeadingAnchor.ConstraintEqualTo(catalog.LeadingAnchor),
+            _heroes.LeadingAnchor.ConstraintEqualTo(_categories.TrailingAnchor, 8),
+            _heroes.WidthAnchor.ConstraintEqualTo(_categories.WidthAnchor),
+            _heroes.CenterYAnchor.ConstraintEqualTo(_categories.CenterYAnchor),
+            _sort.LeadingAnchor.ConstraintEqualTo(_heroes.TrailingAnchor, 8),
+            _sort.TrailingAnchor.ConstraintEqualTo(catalog.TrailingAnchor),
+            _sort.WidthAnchor.ConstraintEqualTo(_categories.WidthAnchor),
+            _sort.CenterYAnchor.ConstraintEqualTo(_categories.CenterYAnchor),
+            _nsfw.TopAnchor.ConstraintEqualTo(_categories.BottomAnchor, 8),
+            _nsfw.LeadingAnchor.ConstraintEqualTo(catalog.LeadingAnchor),
+            results.TopAnchor.ConstraintEqualTo(_nsfw.BottomAnchor, 12),
+            results.LeadingAnchor.ConstraintEqualTo(catalog.LeadingAnchor),
+            results.TrailingAnchor.ConstraintEqualTo(catalog.TrailingAnchor),
+            results.BottomAnchor.ConstraintEqualTo(_previous.TopAnchor, -12),
+            _previous.LeadingAnchor.ConstraintEqualTo(catalog.LeadingAnchor),
+            _previous.BottomAnchor.ConstraintEqualTo(_status.TopAnchor, -10),
+            _next.TrailingAnchor.ConstraintEqualTo(catalog.TrailingAnchor),
+            _next.CenterYAnchor.ConstraintEqualTo(_previous.CenterYAnchor),
+            _pageLabel.CenterXAnchor.ConstraintEqualTo(catalog.CenterXAnchor),
+            _pageLabel.CenterYAnchor.ConstraintEqualTo(_previous.CenterYAnchor),
+            _status.BottomAnchor.ConstraintEqualTo(catalog.BottomAnchor),
+            _status.LeadingAnchor.ConstraintEqualTo(catalog.LeadingAnchor),
+            _status.TrailingAnchor.ConstraintEqualTo(catalog.TrailingAnchor), _status.HeightAnchor.ConstraintEqualTo(48)
+        ]);
     }
 
     private static NSPopUpButton Popup()
@@ -94,7 +147,11 @@ public sealed partial class ModManagerView
             TranslatesAutoresizingMaskIntoConstraints = false,
             DocumentView = document
         };
-        NSLayoutConstraint.ActivateConstraints([document.LeadingAnchor.ConstraintEqualTo(scroll.ContentView.LeadingAnchor), document.TopAnchor.ConstraintEqualTo(scroll.ContentView.TopAnchor), document.WidthAnchor.ConstraintEqualTo(scroll.ContentView.WidthAnchor)]);
+        NSLayoutConstraint.ActivateConstraints([
+            document.LeadingAnchor.ConstraintEqualTo(scroll.ContentView.LeadingAnchor),
+            document.TopAnchor.ConstraintEqualTo(scroll.ContentView.TopAnchor),
+            document.WidthAnchor.ConstraintEqualTo(scroll.ContentView.WidthAnchor)
+        ]);
         return scroll;
     }
 

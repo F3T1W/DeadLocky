@@ -138,34 +138,35 @@ internal static class PanoramaImageList
 
             ranges.Add(((int)offset, (int)size));
             ReadOnlySpan<byte> block = bytes.Slice((int)offset, (int)size);
-            if (type == 0x4C524552) // RERL
+            switch (type)
             {
-                if (size < 8 || BinaryPrimitives.ReadUInt32LittleEndian(block[4..]) > 20000)
-                {
-                    throw new IOException("Invalid Panorama image references.");
-                }
-            }
-            else if (type is 0x41544144 or 0x32444552 or 0x49434C46) // DATA, RED2, FLCI
-            {
-                if (size < 72 || BinaryPrimitives.ReadUInt32LittleEndian(block) is not (0x4B563304 or 0x4B563305)
-                              || BinaryPrimitives.ReadUInt32LittleEndian(block[48..]) > MaximumSize
-                              || BinaryPrimitives.ReadUInt32LittleEndian(block[56..]) != 0
-                              || BinaryPrimitives.ReadUInt32LittleEndian(block[60..]) != 0)
-                {
-                    throw new IOException("Unsupported or oversized Panorama image-list data.");
-                }
+                case 0x4C524552: // RERL
+                    if (size < 8 || BinaryPrimitives.ReadUInt32LittleEndian(block[4..]) > 20000)
+                    {
+                        throw new IOException("Invalid Panorama image references.");
+                    }
 
-                if (BinaryPrimitives.ReadUInt32LittleEndian(block) == 0x4B563305
-                    && (size < 120 || (long)BinaryPrimitives.ReadUInt32LittleEndian(block[72..])
-                        + BinaryPrimitives.ReadUInt32LittleEndian(block[80..])
-                        != BinaryPrimitives.ReadUInt32LittleEndian(block[48..])))
-                {
-                    throw new IOException("Invalid Panorama image-list buffer sizes.");
-                }
-            }
-            else
-            {
-                throw new IOException("The Panorama image list contains an unsupported block.");
+                    break;
+                case 0x41544144 or 0x32444552 or 0x49434C46: // DATA, RED2, FLCI
+                    if (size < 72 || BinaryPrimitives.ReadUInt32LittleEndian(block) is not (0x4B563304 or 0x4B563305)
+                                  || BinaryPrimitives.ReadUInt32LittleEndian(block[48..]) > MaximumSize
+                                  || BinaryPrimitives.ReadUInt32LittleEndian(block[56..]) != 0
+                                  || BinaryPrimitives.ReadUInt32LittleEndian(block[60..]) != 0)
+                    {
+                        throw new IOException("Unsupported or oversized Panorama image-list data.");
+                    }
+
+                    if (BinaryPrimitives.ReadUInt32LittleEndian(block) == 0x4B563305
+                        && (size < 120 || (long)BinaryPrimitives.ReadUInt32LittleEndian(block[72..])
+                            + BinaryPrimitives.ReadUInt32LittleEndian(block[80..])
+                            != BinaryPrimitives.ReadUInt32LittleEndian(block[48..])))
+                    {
+                        throw new IOException("Invalid Panorama image-list buffer sizes.");
+                    }
+
+                    break;
+                default:
+                    throw new IOException("The Panorama image list contains an unsupported block.");
             }
         }
 

@@ -64,12 +64,9 @@ internal static partial class ModPackageExtractor
             .. names.Where(static name => !SegmentName().IsMatch(name))
                 .Order(StringComparer.Ordinal)
         ];
-        if (roots.Length == 0)
-        {
-            throw new IOException("No installable VPK files were found in this download.");
-        }
-
-        return roots;
+        return roots.Length == 0
+            ? throw new IOException("No installable VPK files were found in this download.")
+            : roots;
     }
 
     [GeneratedRegex(@"_\d{3}\.vpk$", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]

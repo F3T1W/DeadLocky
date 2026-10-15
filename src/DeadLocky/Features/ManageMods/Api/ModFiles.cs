@@ -26,13 +26,10 @@ internal static class ModFiles
     public static string SafeRelativePath(string path)
     {
         string normalized = path.Replace('\\', '/');
-        if (normalized.Length == 0 || Path.IsPathRooted(normalized) || normalized.Contains(':')
-            || normalized.Split('/').Any(static part => part is ".." or "." or ""))
-        {
-            throw new IOException("The archive contains an unsafe file path.");
-        }
-
-        return normalized;
+        return normalized.Length == 0 || Path.IsPathRooted(normalized) || normalized.Contains(':')
+               || normalized.Split('/').Any(static part => part is ".." or "." or "")
+            ? throw new IOException("The archive contains an unsafe file path.")
+            : normalized;
     }
 
     public static string Hash(string path)

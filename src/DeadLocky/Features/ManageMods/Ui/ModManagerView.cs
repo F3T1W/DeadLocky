@@ -17,24 +17,37 @@ public sealed partial class ModManagerView : NSView
     private readonly NSStackView _libraryRows = Stack();
     private readonly CancellationTokenSource _lifetime = new();
     private readonly NSButton _next = LauncherStyle.Button("Next");
+
     private readonly NSButton _nsfw = new()
     {
         Title = "Include NSFW",
         TranslatesAutoresizingMaskIntoConstraints = false
     };
+
     private readonly NSWindow _owner;
-    private readonly NSTextField _pageLabel = LauncherStyle.Label("", 12, NSFontWeight.Regular, LauncherStyle.SecondaryText);
+
+    private readonly NSTextField _pageLabel =
+        LauncherStyle.Label("", 12, NSFontWeight.Regular, LauncherStyle.SecondaryText);
+
     private readonly NSButton _previous = LauncherStyle.Button("Previous");
-    private readonly NSTextField _profileSummary = LauncherStyle.Label("", 12, NSFontWeight.Regular, LauncherStyle.SecondaryText);
+
+    private readonly NSTextField _profileSummary =
+        LauncherStyle.Label("", 12, NSFontWeight.Regular, LauncherStyle.SecondaryText);
+
     private readonly NSPopUpButton _profiles = Popup();
     private readonly NSButton _refresh = LauncherStyle.Button("Refresh");
     private readonly NSButton _rename = LauncherStyle.Button("Rename");
+
     private readonly NSSearchField _search = new()
     {
         TranslatesAutoresizingMaskIntoConstraints = false
     };
+
     private readonly NSPopUpButton _sort = Popup();
-    private readonly NSTextField _status = LauncherStyle.Label("Loading catalog…", 12, NSFontWeight.Regular, LauncherStyle.SecondaryText);
+
+    private readonly NSTextField _status =
+        LauncherStyle.Label("Loading catalog…", 12, NSFontWeight.Regular, LauncherStyle.SecondaryText);
+
     private readonly ModWorkspace _workspace;
     private bool _disposed;
     private bool _gameBusy;
@@ -44,6 +57,7 @@ public sealed partial class ModManagerView : NSView
     private int _page;
     private bool _refreshing;
     private CancellationTokenSource? _searchDelay;
+
     public ModManagerView(NSWindow owner, ModWorkspace workspace, ModCatalogClient catalog)
     {
         _owner = owner;
@@ -72,9 +86,14 @@ public sealed partial class ModManagerView : NSView
     }
 
     public bool IsBusy { get; private set; }
-    public string ProfileSummary => _library.ActiveProfile.IsVanilla ? "Profile: Vanilla · No DeadLocky mods" : $"Profile: {_library.ActiveProfile.Name} · " + $"{_library.ActiveProfile.Mods.Count(static mod => mod.Enabled)} enabled";
+
+    public string ProfileSummary => _library.ActiveProfile.IsVanilla
+        ? "Profile: Vanilla · No DeadLocky mods"
+        : $"Profile: {_library.ActiveProfile.Name} · " +
+          $"{_library.ActiveProfile.Mods.Count(static mod => mod.Enabled)} enabled";
 
     public event EventHandler? BusyChanged;
+
     public void SetGameBusy(bool busy)
     {
         if (_gameBusy == busy)
@@ -141,11 +160,14 @@ public sealed partial class ModManagerView : NSView
     private void OnProfileSelected(object? sender, EventArgs args)
     {
         int index = (int)_profiles.IndexOfSelectedItem;
-        if (index >= 0 && index < _library.Profiles.Length)
+        if (index < 0 || index >= _library.Profiles.Length)
         {
-            Guid id = _library.Profiles[index].Id;
-            _ = OperateAsync(token => _workspace.SelectProfileAsync(id, token), "Profile selected. Ready for next launch.");
+            return;
         }
+
+        Guid id = _library.Profiles[index].Id;
+        _ = OperateAsync(token => _workspace.SelectProfileAsync(id, token),
+            "Profile selected. Ready for next launch.");
     }
 
     private void OnCreate(object? sender, EventArgs args)
@@ -188,10 +210,16 @@ public sealed partial class ModManagerView : NSView
         _profiles.Enabled = editable;
         _create.Enabled = editable;
         _rename.Enabled = editable && !profile.IsVanilla;
-        _profileSummary.StringValue = _gameBusy ? "Close Deadlock to edit profiles." : profile.IsVanilla ? "Always available. No DeadLocky mods." : $"{profile.Mods.Count(static mod => mod.Enabled)} of {profile.Mods.Length} enabled · Applies on Play";
+        _profileSummary.StringValue = _gameBusy ? "Close Deadlock to edit profiles." :
+            profile.IsVanilla ? "Always available. No DeadLocky mods." :
+            $"{profile.Mods.Count(static mod => mod.Enabled)} of {profile.Mods.Length} enabled · Applies on Play";
         if (profile.Mods.Length == 0)
         {
-            NSTextField empty = Wrap(profile.IsVanilla ? "Your clean starting point. Create a profile to install mods." : "This profile is empty. Browse the catalog and install your first mod.", 13);
+            NSTextField empty =
+                Wrap(
+                    profile.IsVanilla
+                        ? "Your clean starting point. Create a profile to install mods."
+                        : "This profile is empty. Browse the catalog and install your first mod.", 13);
             AddRow(_libraryRows, empty);
         }
 
@@ -212,32 +240,54 @@ public sealed partial class ModManagerView : NSView
                 ToolTip = package.Name + " — " + package.DownloadName
             };
             toggle.SetButtonType(NSButtonType.Switch);
-            toggle.Activated += (_, _) => _ = OperateAsync(token => _workspace.SetEnabledAsync(profile.Id, entry.PackageId, toggle.State == NSCellStateValue.On, token), "Profile updated.");
+            toggle.Activated += (_, _) =>
+                _ = OperateAsync(
+                    token => _workspace.SetEnabledAsync(profile.Id, entry.PackageId,
+                        toggle.State == NSCellStateValue.On, token), "Profile updated.");
             NSButton remove = LauncherStyle.Button("Remove");
             NSButton up = LauncherStyle.Button("↑");
             NSButton down = LauncherStyle.Button("↓");
             remove.Enabled = editable;
             up.Enabled = editable && index > 0;
             down.Enabled = editable && index < profile.Mods.Length - 1;
-            remove.Activated += (_, _) => _ = OperateAsync(token => _workspace.RemoveAsync(profile.Id, entry.PackageId, token), "Removed from this profile.");
-            up.Activated += (_, _) => _ = OperateAsync(token => _workspace.MoveAsync(profile.Id, entry.PackageId, -1, token), "Load order updated.");
-            down.Activated += (_, _) => _ = OperateAsync(token => _workspace.MoveAsync(profile.Id, entry.PackageId, 1, token), "Load order updated.");
-            NSTextField author = LauncherStyle.Label(package.Author, 11, NSFontWeight.Regular, LauncherStyle.SecondaryText);
+            remove.Activated += (_, _) =>
+                _ = OperateAsync(token => _workspace.RemoveAsync(profile.Id, entry.PackageId, token),
+                    "Removed from this profile.");
+            up.Activated += (_, _) =>
+                _ = OperateAsync(token => _workspace.MoveAsync(profile.Id, entry.PackageId, -1, token),
+                    "Load order updated.");
+            down.Activated += (_, _) =>
+                _ = OperateAsync(token => _workspace.MoveAsync(profile.Id, entry.PackageId, 1, token),
+                    "Load order updated.");
+            NSTextField author =
+                LauncherStyle.Label(package.Author, 11, NSFontWeight.Regular, LauncherStyle.SecondaryText);
             foreach (NSView view in new NSView[]
-            {
-                toggle,
-                author,
-                remove,
-                up,
-                down
-            }
-
-            )
+                     {
+                         toggle,
+                         author,
+                         remove,
+                         up,
+                         down
+                     }
+                    )
             {
                 row.AddSubview(view);
             }
 
-            NSLayoutConstraint.ActivateConstraints([row.HeightAnchor.ConstraintEqualTo(94), toggle.TopAnchor.ConstraintEqualTo(row.TopAnchor, 4), toggle.LeadingAnchor.ConstraintEqualTo(row.LeadingAnchor), toggle.TrailingAnchor.ConstraintEqualTo(row.TrailingAnchor), author.TopAnchor.ConstraintEqualTo(toggle.BottomAnchor, 3), author.LeadingAnchor.ConstraintEqualTo(row.LeadingAnchor, 22), author.TrailingAnchor.ConstraintEqualTo(row.TrailingAnchor), up.LeadingAnchor.ConstraintEqualTo(row.LeadingAnchor), up.BottomAnchor.ConstraintEqualTo(row.BottomAnchor, -6), down.LeadingAnchor.ConstraintEqualTo(up.TrailingAnchor, 4), down.CenterYAnchor.ConstraintEqualTo(up.CenterYAnchor), remove.TrailingAnchor.ConstraintEqualTo(row.TrailingAnchor), remove.CenterYAnchor.ConstraintEqualTo(up.CenterYAnchor)]);
+            NSLayoutConstraint.ActivateConstraints([
+                row.HeightAnchor.ConstraintEqualTo(94), toggle.TopAnchor.ConstraintEqualTo(row.TopAnchor, 4),
+                toggle.LeadingAnchor.ConstraintEqualTo(row.LeadingAnchor),
+                toggle.TrailingAnchor.ConstraintEqualTo(row.TrailingAnchor),
+                author.TopAnchor.ConstraintEqualTo(toggle.BottomAnchor, 3),
+                author.LeadingAnchor.ConstraintEqualTo(row.LeadingAnchor, 22),
+                author.TrailingAnchor.ConstraintEqualTo(row.TrailingAnchor),
+                up.LeadingAnchor.ConstraintEqualTo(row.LeadingAnchor),
+                up.BottomAnchor.ConstraintEqualTo(row.BottomAnchor, -6),
+                down.LeadingAnchor.ConstraintEqualTo(up.TrailingAnchor, 4),
+                down.CenterYAnchor.ConstraintEqualTo(up.CenterYAnchor),
+                remove.TrailingAnchor.ConstraintEqualTo(row.TrailingAnchor),
+                remove.CenterYAnchor.ConstraintEqualTo(up.CenterYAnchor)
+            ]);
             AddRow(_libraryRows, row);
         }
     }

@@ -41,19 +41,16 @@ public sealed class ModWorkspace : IAsyncDisposable
         ModLibrary library = JsonSerializer.Deserialize(File.ReadAllBytes(path), ModJsonContext.Default.ModLibrary)
                              ?? throw new IOException("The mod library is invalid.");
         ModProfile[] profiles = [ModProfile.Vanilla, .. library.Profiles.Where(static profile => !profile.IsVanilla)];
-        if (profiles.Select(static profile => profile.Id).Distinct().Count() != profiles.Length
-            || library.Packages.Select(static package => package.Id).Distinct().Count() != library.Packages.Length)
-        {
-            throw new IOException("The mod library contains duplicate identifiers.");
-        }
-
-        return library with
-        {
-            Profiles = profiles,
-            ActiveProfileId = profiles.Any(profile => profile.Id == library.ActiveProfileId)
-                ? library.ActiveProfileId
-                : Guid.Empty
-        };
+        return profiles.Select(static profile => profile.Id).Distinct().Count() != profiles.Length
+               || library.Packages.Select(static package => package.Id).Distinct().Count() != library.Packages.Length
+            ? throw new IOException("The mod library contains duplicate identifiers.")
+            : (library with
+            {
+                Profiles = profiles,
+                ActiveProfileId = profiles.Any(profile => profile.Id == library.ActiveProfileId)
+                    ? library.ActiveProfileId
+                    : Guid.Empty
+            });
     }
 
     public Task CreateProfileAsync(string name, CancellationToken token)
@@ -300,14 +297,11 @@ public sealed class ModWorkspace : IAsyncDisposable
     private static string ValidateName(string name, ModLibrary library, Guid? except = null)
     {
         string value = name.Trim();
-        if (value.Length is 0 or > 60 || value.Any(char.IsControl)
-                                      || library.Profiles.Any(profile => profile.Id != except
-                                                                         && string.Equals(profile.Name, value,
-                                                                             StringComparison.OrdinalIgnoreCase)))
-        {
-            throw new IOException("Use a unique profile name between 1 and 60 characters.");
-        }
-
-        return value;
+        return value.Length is 0 or > 60 || value.Any(char.IsControl)
+                                         || library.Profiles.Any(profile => profile.Id != except
+                                                                            && string.Equals(profile.Name, value,
+                                                                                StringComparison.OrdinalIgnoreCase))
+            ? throw new IOException("Use a unique profile name between 1 and 60 characters.")
+            : value;
     }
 }
