@@ -28,6 +28,7 @@ public sealed class LaunchGameView : NSStackView
 #endif
     private readonly NSLayoutConstraint _setupWidth;
     private readonly NSTextField _title = LauncherStyle.Label("Ready when you are.", 14, NSFontWeight.Medium);
+    private string _profileSummary = "Ready to play on your Mac";
     private bool _disposed;
 #if DEBUG
     private bool _isTesting;
@@ -93,7 +94,7 @@ public sealed class LaunchGameView : NSStackView
     }
 
     public bool IsActive => _controller.State.IsStarting || _controller.State.IsRunning
-                            || _controller.State.EmergencyStopRequested;
+                                                         || _controller.State.EmergencyStopRequested;
 
     public event EventHandler? ActivityChanged;
 
@@ -113,6 +114,12 @@ public sealed class LaunchGameView : NSStackView
         }
 
         return _controller.Configuration is not null;
+    }
+
+    public void SetProfileSummary(string summary)
+    {
+        _profileSummary = summary;
+        Render();
     }
 
     public void SetInstallation(string directory, bool ready, bool busy)
@@ -252,7 +259,7 @@ public sealed class LaunchGameView : NSStackView
             : state.InstallationReady ? "Ready when you are." : "One step closer.";
         _detail.StringValue = _controller.Configuration is null
             ? "Set up GPTK to play on Mac"
-            : "Ready to play on your Mac";
+            : _profileSummary;
         _setup.Hidden = _controller.Configuration is not null;
         _setupWidth.Active = _setup.Hidden;
         _setup.Enabled = !IsActive && !state.IsConfiguring;

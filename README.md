@@ -36,6 +36,40 @@ to allow access in the system dialog. The app bundle declares `NSMicrophoneUsage
 can present that dialog. A missing purpose string caused a Settings hang on the development machine;
 adding it and granting microphone access resolved the hang during local testing.
 
+## Mod profiles and catalog
+
+Open **Mods** to browse the public [deadlockmods.app catalog](https://deadlockmods.app).
+Search names, authors and heroes; combine category and hero filters, change sorting, scroll the results
+and move between pages. The last successful catalog is cached for offline browsing. Downloads require
+an internet connection. NSFW entries are hidden unless explicitly included.
+
+**Vanilla** is a permanent, read-only profile with no DeadLocky-managed mods. Create and rename custom
+profiles, install a mod into the selected profile, enable or disable it, change its order, or remove it
+from that profile. Other profiles retain their own installed versions and enabled state. Package files
+are shared in the local cache. The selected profile is shown beside **Play** and is applied before launch;
+profile edits are blocked while the game is running or starting.
+
+Installation supports direct VPK files and ZIP, 7z and RAR archives through SharpCompress. Choose the
+author's download and, for multi-variant archives, the VPKs you want together. Multipart data files are
+included automatically. Required mod dependencies must already be enabled in the same profile.
+Shared paths are allowed when their resource contents match. Texture comparisons ignore editor/compiler
+provenance while preserving runtime blocks and pixel data; root package documentation does not conflict.
+Panorama image lists (`panorama/image_compiler.vdata_c`) are combined across enabled mods, including their
+external resource references. Only staged VPK copies are repacked; cached downloads stay unchanged.
+Other different game content at the same path is reported as a conflict; disable one conflicting mod before Play.
+A profile currently supports up to 99 enabled VPK indexes.
+
+Mods are staged under `~/Library/Application Support/DeadLocky/Mods` and deployed only to
+`game/citadel/DeadLockyAddons`. The launcher adds its own search path to the current `gameinfo.gi`, keeping the base
+game's
+`Mod` and `Write` paths so default keybindings and settings remain available.
+Returning to Vanilla removes the owned configuration entries and DeadLocky's files. Files installed by other tools are
+not
+part of the clean-profile guarantee. A persisted transaction journal recovers interrupted deployments;
+changed or foreign files block cleanup instead of being deleted. Current Steam metadata and the game
+process are checked before game-file writes, and Steam configuration changes are preserved during recovery.
+Catalog responses and previews are cached; no website account or Steam credentials are sent to the mod API.
+
 ## Architecture and checks
 
 The UML class diagram below uses [Mermaid](https://mermaid.js.org/), an open source diagram renderer.
@@ -67,6 +101,12 @@ classDiagram
         FindRunningAsync()
     }
     class GptkGameLauncher
+    class ModWorkspace
+    class ModCatalogClient
+    class ModManagerView
+    class ModDeployment
+    class ModProfile
+    class InstalledMod
     class IRuntimeSetup {
         <<interface>>
         FindExisting()
@@ -103,6 +143,15 @@ classDiagram
     GameLaunchController --> IGameLauncher
     GameLaunchController --> IGameSession : monitors
     GptkGameLauncher ..|> IGameLauncher
+    LauncherComposition ..> ModWorkspace : constructs
+    LauncherComposition ..> ModCatalogClient : constructs
+    LauncherWindowController *-- ModManagerView
+    ModManagerView --> ModWorkspace
+    ModManagerView --> ModCatalogClient
+    GptkGameLauncher ..> ModWorkspace : injected pre-launch callback
+    ModWorkspace --> ModProfile
+    ModWorkspace --> InstalledMod
+    ModWorkspace --> ModDeployment : applies and recovers
     GptkGameLauncher ..> GameProcessSession : creates
     GptkGameLauncher ..> RuntimeSetupInstaller : creates normal or isolated setup
     GameProcessSession ..|> IGameSession
@@ -118,11 +167,13 @@ One application assembly uses PascalCase FSD directories:
 - `Pages/Launcher`: screen layout and coordination between features.
 - `Features/PrepareGame`: directory, saved Steam sign-in and installation workflow.
 - `Features/LaunchGame`: environment setup, launch, process monitoring and exit cleanup.
+- `Features/ManageMods`: catalog, downloads, profiles, VPK validation, deployment and recovery.
 - `Entities`: game directory and Steam account values.
 - `Shared`: reusable AppKit styles and directory-picker adapter.
 
 Features do not import sibling features. The single application project targets `net10.0-macos` for AppKit
-and `net10.0` for portable APIs and models. The xUnit project references its portable target directly. JSON persistence uses source-generated serialization for NativeAOT.
+and `net10.0` for portable APIs and models. The xUnit project references its portable target directly. JSON persistence
+uses source-generated serialization for NativeAOT.
 There are no QRCoder or SteamKit2 dependencies, separate QR login, or custom Steam content downloader.
 Installation receipts from earlier versions remain readable as a local fallback.
 

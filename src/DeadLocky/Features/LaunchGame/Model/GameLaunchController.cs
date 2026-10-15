@@ -25,6 +25,26 @@ internal sealed class GameLaunchController(IGameLauncher launcher) : IDisposable
 
     public bool CanEmergencyStop => launcher is IEmergencyGameStopper;
 
+    public bool CloseSteamAfterExit => launcher is IGameExitPreferences { CloseSteamAfterExit: true };
+
+    public void Dispose()
+    {
+        lock (_sync)
+        {
+            if (_disposed)
+            {
+                return;
+            }
+
+            _disposed = true;
+            StateChanged = null;
+        }
+
+        _lifetime.Cancel();
+        _session?.Dispose();
+        launcher.Dispose();
+    }
+
     public async Task<bool> EmergencyStopAsync()
     {
         lock (_sync)
@@ -53,26 +73,6 @@ internal sealed class GameLaunchController(IGameLauncher launcher) : IDisposable
             Update(state => state with { IsStopping = false, Error = exception.Message });
             return false;
         }
-    }
-
-    public bool CloseSteamAfterExit => launcher is IGameExitPreferences { CloseSteamAfterExit: true };
-
-    public void Dispose()
-    {
-        lock (_sync)
-        {
-            if (_disposed)
-            {
-                return;
-            }
-
-            _disposed = true;
-            StateChanged = null;
-        }
-
-        _lifetime.Cancel();
-        _session?.Dispose();
-        launcher.Dispose();
     }
 
     public void SetCloseSteamAfterExit(bool enabled)

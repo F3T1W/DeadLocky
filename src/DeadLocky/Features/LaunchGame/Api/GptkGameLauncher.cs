@@ -7,22 +7,79 @@ namespace DeadLocky.Features.LaunchGame.Api;
 public sealed class GptkGameLauncher : IGameLauncher, IGameExitPreferences, IRuntimeSetupProvider, IEmergencyGameStopper
 {
     private readonly GameExitPreferencesStore _preferences;
+    private readonly Func<string, CancellationToken, Task>? _prepareLaunch;
     private readonly Lock _processStart = new();
-    private bool _emergencyStopRequested;
     private readonly CancellationTokenSource _shutdown = new();
     private readonly SemaphoreSlim _start = new(1, 1);
     private readonly GptkConfigurationStore _store;
     private readonly string _storePath;
     private bool _closeSteamAfterExit;
+    private bool _emergencyStopRequested;
 
-    public GptkGameLauncher(string configurationPath)
+    public GptkGameLauncher(string configurationPath,
+        Func<string, CancellationToken, Task>? prepareLaunch = null)
     {
+        _prepareLaunch = prepareLaunch;
         _storePath = configurationPath;
         _store = new GptkConfigurationStore(configurationPath);
         Configuration = _store.Read() ?? _store.DiscoverOwnedInstallation();
         _preferences = new GameExitPreferencesStore(Path.ChangeExtension(configurationPath, ".preferences.json"));
         _closeSteamAfterExit = _preferences.Read().CloseSteamAfterExit;
         RuntimeSetup = new RuntimeSetupInstaller(Path.GetDirectoryName(Path.GetFullPath(configurationPath))!);
+    }
+
+    public async Task StopAsync(CancellationToken cancellationToken)
+    {
+        lock (_processStart)
+        {
+            _emergencyStopRequested = true;
+        }
+
+        await _shutdown.CancelAsync();
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        timeout.CancelAfter(TimeSpan.FromSeconds(20));
+        CancellationToken token = timeout.Token;
+        await _start.WaitAsync(token);
+        try
+        {
+            GameLaunchConfiguration? configuration = Configuration;
+            if (configuration is null)
+            {
+                return;
+            }
+
+            // Stop the prefix's server first so Wine clients cannot respawn each other.
+            string server = Path.Combine(Path.GetDirectoryName(configuration.WineExecutable)!, "wineserver");
+            if (File.Exists(server))
+            {
+                var stop = new ProcessStartInfo(server)
+                {
+                    UseShellExecute = false,
+                    Environment = { ["WINEPREFIX"] = configuration.PrefixDirectory }
+                };
+                stop.ArgumentList.Add("-k");
+                using Process process = Process.Start(stop) ?? throw new IOException("Unable to stop the GPTK prefix.");
+                try
+                {
+                    await process.WaitForExitAsync(token);
+                }
+                catch (OperationCanceledException)
+                {
+                    if (!process.HasExited)
+                    {
+                        process.Kill();
+                    }
+
+                    throw;
+                }
+            }
+
+            await Task.Run(() => MacGameProcessScanner.StopPrefixProcessesAsync(configuration, token), token);
+        }
+        finally
+        {
+            _ = _start.Release();
+        }
     }
 
     public bool CloseSteamAfterExit
@@ -94,6 +151,12 @@ public sealed class GptkGameLauncher : IGameLauncher, IGameExitPreferences, IRun
 
             SteamInstallationLink.Register(GptkConfigurationStore.SteamExecutable(configuration), directory);
             cancellationToken.ThrowIfCancellationRequested();
+            if (_prepareLaunch is not null)
+            {
+                await _prepareLaunch(directory, cancellationToken);
+                cancellationToken.ThrowIfCancellationRequested();
+            }
+
             Task<int> command = StartSteam(configuration, true, cancellationToken);
             var deadline = Stopwatch.StartNew();
             while (deadline.Elapsed < TimeSpan.FromMinutes(2))
@@ -114,60 +177,6 @@ public sealed class GptkGameLauncher : IGameLauncher, IGameExitPreferences, IRun
 
             throw new IOException("Windows Steam did not start Deadlock. Finish signing in there, "
                                   + "let Steam recognize the linked game files, then retry Play.");
-        }
-        finally
-        {
-            _ = _start.Release();
-        }
-    }
-
-    public async Task StopAsync(CancellationToken cancellationToken)
-    {
-        lock (_processStart)
-        {
-            _emergencyStopRequested = true;
-        }
-
-        await _shutdown.CancelAsync();
-        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        timeout.CancelAfter(TimeSpan.FromSeconds(20));
-        CancellationToken token = timeout.Token;
-        await _start.WaitAsync(token);
-        try
-        {
-            GameLaunchConfiguration? configuration = Configuration;
-            if (configuration is null)
-            {
-                return;
-            }
-
-            // Stop the prefix's server first so Wine clients cannot respawn each other.
-            string server = Path.Combine(Path.GetDirectoryName(configuration.WineExecutable)!, "wineserver");
-            if (File.Exists(server))
-            {
-                var stop = new ProcessStartInfo(server)
-                {
-                    UseShellExecute = false,
-                    Environment = { ["WINEPREFIX"] = configuration.PrefixDirectory }
-                };
-                stop.ArgumentList.Add("-k");
-                using Process process = Process.Start(stop) ?? throw new IOException("Unable to stop the GPTK prefix.");
-                try
-                {
-                    await process.WaitForExitAsync(token);
-                }
-                catch (OperationCanceledException)
-                {
-                    if (!process.HasExited)
-                    {
-                        process.Kill();
-                    }
-
-                    throw;
-                }
-            }
-
-            await Task.Run(() => MacGameProcessScanner.StopPrefixProcessesAsync(configuration, token), token);
         }
         finally
         {
@@ -237,6 +246,21 @@ public sealed class GptkGameLauncher : IGameLauncher, IGameExitPreferences, IRun
             {
                 return;
             }
+        }
+    }
+
+    public void EnsureGameFilesIdle(string directory)
+    {
+        GameLaunchConfiguration configuration = ValidConfiguration();
+        if (MacGameProcessScanner.IsRunning(configuration, directory))
+        {
+            throw new IOException("Close Deadlock before applying a mod profile.");
+        }
+
+        string steam = Path.GetDirectoryName(GptkConfigurationStore.SteamExecutable(configuration))!;
+        if (!SteamClientState.IsInstalled(steam, directory))
+        {
+            throw new IOException("Wait for Steam to finish installing or updating Deadlock before applying mods.");
         }
     }
 

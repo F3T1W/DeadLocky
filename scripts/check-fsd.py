@@ -1,9 +1,9 @@
 """Check FSD source layout, project references and explicit namespace imports (not a semantic analyzer)."""
 
-from pathlib import Path
 import re
 import sys
 import xml.etree.ElementTree as ET
+from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 LAYERS = {"shared": 0, "entities": 1, "features": 2, "pages": 3, "app": 4}
