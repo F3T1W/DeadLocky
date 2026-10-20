@@ -7,6 +7,7 @@ namespace DeadLocky.App.EntryPoint;
 [Register("AppDelegate")]
 internal sealed class AppDelegate : NSApplicationDelegate
 {
+    private bool _terminationPending;
     private LauncherWindowController? _mainWindowController;
 
     public override void DidFinishLaunching(NSNotification notification)
@@ -21,7 +22,37 @@ internal sealed class AppDelegate : NSApplicationDelegate
 #endif
 
         _mainWindowController.ShowWindow(this);
+        _mainWindowController.StartUpdates();
         NSApplication.SharedApplication.Activate();
+    }
+
+    public override NSApplicationTerminateReply ApplicationShouldTerminate(NSApplication sender)
+    {
+        if (_mainWindowController?.IsUpdating != true)
+        {
+            return NSApplicationTerminateReply.Now;
+        }
+
+        if (_terminationPending)
+        {
+            return NSApplicationTerminateReply.Later;
+        }
+
+        _terminationPending = true;
+        _ = FinishTerminationAsync(sender);
+        return NSApplicationTerminateReply.Later;
+    }
+
+    private async Task FinishTerminationAsync(NSApplication sender)
+    {
+        try
+        {
+            await _mainWindowController!.StopUpdatesAsync();
+        }
+        finally
+        {
+            sender.ReplyToApplicationShouldTerminate(true);
+        }
     }
 
     public override bool ApplicationShouldTerminateAfterLastWindowClosed(NSApplication sender)

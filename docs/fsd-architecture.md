@@ -75,3 +75,12 @@ check-fsd.py checks layout and explicit namespace imports, not semantic architec
 
 References: [FSD layers](https://feature-sliced.design/docs/reference/layers),
 [FSD public API](https://feature-sliced.design/docs/reference/public-api).
+
+## App updates
+
+`Features/UpdateApp` owns semantic version ordering, public GitHub release discovery,
+verified DMG downloads and the macOS replacement helper. `Pages/Launcher` coordinates
+its busy state with game preparation, launching and mod installation. The composition
+root supplies the installed bundle path and version. Application termination waits for
+update cancellation, and startup confirms a successful replacement after the main
+window opens. App updates do not access the game deployment transaction or profiles.

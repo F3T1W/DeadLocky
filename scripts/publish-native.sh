@@ -32,12 +32,16 @@ fi
 ./.dotnet/dotnet publish src/DeadLocky/DeadLocky.csproj \
     -c Release -f net10.0-macos -r osx-arm64 \
     -p:PublishAot=true -p:CreatePackage=false -p:CopyDSYMToPublishDirectory=false \
-    "-p:BaseOutputPath=$build_dir/bin/" \
+    "-p:BaseOutputPath=$build_dir/bin/" "-p:BaseIntermediateOutputPath=$build_dir/obj/" \
     "${signing_options[@]}" -o "$build_dir/publish"
 
 built_app="$build_dir/bin/Release/net10.0-macos/osx-arm64/DeadLocky.app"
 executable="$built_app/Contents/MacOS/DeadLocky"
 [[ -x "$executable" ]]
+[[ "$(plutil -extract CFBundleShortVersionString raw "$built_app/Contents/Info.plist")" == \
+    "$(plutil -extract CFBundleShortVersionString raw src/DeadLocky/Info.plist)" ]]
+[[ "$(plutil -extract CFBundleIconFile raw "$built_app/Contents/Info.plist")" == AppIcon ]]
+[[ -s "$built_app/Contents/Resources/AppIcon.icns" ]]
 [[ "$(lipo -archs "$executable")" == arm64 ]]
 [[ ! -e "$built_app/Contents/MonoBundle/libcoreclr.dylib" ]]
 [[ -z "$(find "$built_app" -type f -name '*.dll' -print -quit)" ]]

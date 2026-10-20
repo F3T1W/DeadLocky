@@ -16,7 +16,7 @@ internal static class UiAction
             using var alert = new NSAlert();
             alert.MessageText = "Unable to complete the action";
             alert.InformativeText = exception.Message;
-            _ = alert.AddButton("Close");
+            LauncherStyle.ApplyButtonStyle(alert.AddButton("Close"));
             _ = owner is not null ? alert.RunSheetModal(owner) : alert.RunModal();
         }
     }

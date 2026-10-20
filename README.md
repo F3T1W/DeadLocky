@@ -20,6 +20,26 @@ For maintainers, `bash scripts/create-dmg.sh` builds and verifies the image plus
 SHA-256 checksum under `artifacts/Releases`. See [release instructions](docs/Releasing.md)
 for checks, Developer ID signing and optional notarization.
 
+## Launcher updates
+
+DeadLocky checks public GitHub releases in the background at startup, including
+previews. The circular-arrow button in the bottom-right repeats the check manually.
+Checks do not block the interface. If a newer version is available, it downloads the Apple Silicon
+DMG, checks its SHA-256 digest, bundle identity, version, architecture, macOS requirement
+and code signature, then replaces the app and restarts it without a confirmation dialog. The previous bundle stays
+available until the new app confirms that its main window opened. Installation waits until the game, setup and mod installation are idle. The game, Wine prefix and mod profiles
+are not replaced. Quit during a download cancels the update and waits for cleanup.
+
+Run a Release app copied to a writable Applications folder to install updates. Debug
+builds can check availability but never replace themselves. The first upgrade from
+0.1.0 requires installing a newer DMG manually because 0.1.0 has no updater.
+Release previews remain ad hoc signed: SHA-256 verifies the downloaded bytes against
+GitHub's metadata, and is not a Developer ID signature or Apple notarization.
+
+Action buttons, pop-up controls and app-created dialog buttons use native Liquid Glass
+on macOS 26 and later. Earlier supported systems use native rounded controls. Checkboxes
+retain their system behavior and accessibility.
+
 ## Set up and play
 
 The setup wizard appears when no valid game environment exists. Download Apple's GPTK evaluation
@@ -177,6 +197,7 @@ One application assembly uses PascalCase FSD directories:
 - `Features/PrepareGame`: directory, saved Steam sign-in and installation workflow.
 - `Features/LaunchGame`: environment setup, launch, process monitoring and exit cleanup.
 - `Features/ManageMods`: catalog, downloads, profiles, VPK validation, deployment and recovery.
+- `Features/UpdateApp`: GitHub release checks, verified downloads, replacement and startup confirmation.
 - `Entities`: game directory and Steam account values.
 - `Shared`: reusable AppKit styles and directory-picker adapter.
 

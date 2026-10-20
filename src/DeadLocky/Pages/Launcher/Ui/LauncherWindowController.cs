@@ -4,6 +4,9 @@ using DeadLocky.Features.ManageMods.Api;
 using DeadLocky.Features.ManageMods.Ui;
 using DeadLocky.Features.PrepareGame.Api;
 using DeadLocky.Features.PrepareGame.Ui;
+using DeadLocky.Features.UpdateApp.Api;
+using DeadLocky.Features.UpdateApp.Model;
+using DeadLocky.Features.UpdateApp.Ui;
 using DeadLocky.Shared.Api.Directories;
 using DeadLocky.Shared.Ui;
 
@@ -20,6 +23,7 @@ public sealed class LauncherWindowController : NSWindowController
     private readonly NSButton _launcherTab = LauncherStyle.Button("Launcher", true);
     private readonly NSButton _modsTab = LauncherStyle.Button("Mods");
     private ModManagerView? _mods;
+    private AppUpdateView? _updates;
     private bool _disposed;
     private LaunchGameView? _launch;
     private bool _wasGameActive;
@@ -113,6 +117,34 @@ public sealed class LauncherWindowController : NSWindowController
         _launch?.SetProfileSummary(_mods.ProfileSummary);
     }
 
+    public bool IsUpdating => _updates?.HasOperation == true;
+
+    public Task StopUpdatesAsync()
+    {
+        return _updates?.StopAsync() ?? Task.CompletedTask;
+    }
+
+    public void ConfigureUpdates(HttpClient http, MacUpdateInstaller installer, AppVersion version)
+    {
+        if (_updates is not null)
+        {
+            throw new InvalidOperationException("Updates are already configured.");
+        }
+
+        _updates = new AppUpdateView(http, installer, version);
+        NSView content = Window.ContentView!;
+        content.AddSubview(_updates);
+        _updates.BusyChanged += OnPreparationChanged;
+        NSLayoutConstraint.ActivateConstraints(
+        [
+            _updates.TrailingAnchor.ConstraintEqualTo(content.TrailingAnchor, -28),
+            _updates.CenterYAnchor.ConstraintEqualTo(_launcherTab.CenterYAnchor),
+            _updates.LeadingAnchor.ConstraintGreaterThanOrEqualTo(_modsTab.TrailingAnchor, 24),
+            _updates.WidthAnchor.ConstraintLessThanOrEqualTo(430)
+        ]);
+        OnPreparationChanged(this, EventArgs.Empty);
+    }
+
     private void OnLauncherTab(object? sender, EventArgs args)
     {
         ShowMods(false);
@@ -128,8 +160,8 @@ public sealed class LauncherWindowController : NSWindowController
         _launcherPage.Hidden = show;
         _mods?.Hidden = !show;
 
-        _launcherTab.BezelColor = show ? null : LauncherStyle.Accent;
-        _modsTab.BezelColor = show ? LauncherStyle.Accent : null;
+        LauncherStyle.ApplyButtonStyle(_launcherTab, !show);
+        LauncherStyle.ApplyButtonStyle(_modsTab, show);
     }
 
     private void OnModsBusyChanged(object? sender, EventArgs args)
@@ -166,8 +198,10 @@ public sealed class LauncherWindowController : NSWindowController
     private void OnPreparationChanged(object? sender, EventArgs args)
     {
         _launch?.SetInstallation(_selection.DirectoryPath, _selection.IsDownloaded,
-            _selection.IsInstallationBusy || _mods?.IsBusy == true);
-        _mods?.SetGameBusy(_launch?.IsActive == true || _selection.IsInstallationBusy);
+            _selection.IsInstallationBusy || _mods?.IsBusy == true || _updates?.IsBusy == true);
+        _mods?.SetGameBusy(_launch?.IsActive == true || _selection.IsInstallationBusy || _updates?.IsBusy == true);
+        _updates?.SetGameBusy(_launch?.IsBusy == true || _selection.IsBusy || _mods?.IsBusy == true);
+        _selection.SetExternalBusy(_updates?.IsBusy == true);
     }
 
     public void UseSteamClientPreparation()
@@ -183,7 +217,7 @@ public sealed class LauncherWindowController : NSWindowController
 
     public async Task ShowRuntimeSetupAsync()
     {
-        if (_launch is null)
+        if (_launch is null || _updates?.IsBusy == true)
         {
             return;
         }
@@ -212,16 +246,26 @@ public sealed class LauncherWindowController : NSWindowController
         bool finished = _wasGameActive && !active;
         _wasGameActive = active;
         _selection.SetGameRunning(active);
-        _mods?.SetGameBusy(active || _selection.IsInstallationBusy);
+        _mods?.SetGameBusy(active || _selection.IsInstallationBusy || _updates?.IsBusy == true);
+        _updates?.SetGameBusy(_launch?.IsBusy == true || _selection.IsBusy || _mods?.IsBusy == true);
         if (finished)
         {
             _ = _selection.RefreshSteamClientAsync();
         }
     }
 
+    public void StartUpdates()
+    {
+        _ = _updates?.ConfirmLaunchAsync();
+        _updates?.CheckAutomatically();
+    }
+
     private void OnWindowActivated(object? sender, EventArgs args)
     {
-        _ = _selection.RefreshSteamClientAsync();
+        if (_updates?.IsBusy != true)
+        {
+            _ = _selection.RefreshSteamClientAsync();
+        }
     }
 
     protected override void Dispose(bool disposing)
@@ -246,6 +290,12 @@ public sealed class LauncherWindowController : NSWindowController
             {
                 _mods.BusyChanged -= OnModsBusyChanged;
                 _mods.Dispose();
+            }
+
+            if (_updates is not null)
+            {
+                _updates.BusyChanged -= OnPreparationChanged;
+                _updates.Dispose();
             }
 
             _selection.Dispose();

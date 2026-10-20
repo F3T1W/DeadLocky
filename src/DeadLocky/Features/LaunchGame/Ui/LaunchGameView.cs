@@ -96,6 +96,8 @@ public sealed class LaunchGameView : NSStackView
     public bool IsActive => _controller.State.IsStarting || _controller.State.IsRunning
                                                          || _controller.State.EmergencyStopRequested;
 
+    public bool IsBusy => IsActive || _controller.State.IsConfiguring;
+
     public event EventHandler? ActivityChanged;
 
     public async Task OpenSteamAccountAsync()
@@ -262,7 +264,7 @@ public sealed class LaunchGameView : NSStackView
             : _profileSummary;
         _setup.Hidden = _controller.Configuration is not null;
         _setupWidth.Active = _setup.Hidden;
-        _setup.Enabled = !IsActive && !state.IsConfiguring;
+        _setup.Enabled = !IsBusy && !state.PreparationBusy;
         _closeSteam.State = _controller.CloseSteamAfterExit ? NSCellStateValue.On : NSCellStateValue.Off;
         _error.StringValue = state.Error ?? "";
         _error.ToolTip = state.Error;

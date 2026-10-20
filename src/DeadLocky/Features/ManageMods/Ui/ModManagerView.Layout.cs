@@ -120,10 +120,9 @@ public sealed partial class ModManagerView
 
     private static NSPopUpButton Popup()
     {
-        return new NSPopUpButton
-        {
-            TranslatesAutoresizingMaskIntoConstraints = false
-        };
+        var popup = new NSPopUpButton { TranslatesAutoresizingMaskIntoConstraints = false };
+        LauncherStyle.ApplyButtonStyle(popup);
+        return popup;
     }
 
     private static FlippedStack Stack()

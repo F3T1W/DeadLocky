@@ -1,12 +1,12 @@
 {
   "sdk": {
-    "version": "10.0.401",
+    "version": "10.0.402",
     "rollForward": "latestPatch",
     "allowPrerelease": false,
     "paths": [
       ".dotnet",
       "$host$"
     ],
-    "workloadVersion": "10.0.401.1"
+    "workloadVersion": "10.0.402.1"
   }
 }

@@ -276,9 +276,9 @@ internal sealed class RuntimeSetupWizard : IDisposable
         alert.MessageText = "Install Rosetta from Apple?";
         alert.InformativeText = "Rosetta runs the Intel game environment on your Mac. Choosing Install accepts "
                                 + "Apple's Rosetta software license. You can review the license before continuing.";
-        _ = alert.AddButton("Install");
-        _ = alert.AddButton("Cancel");
-        _ = alert.AddButton("Review license");
+        LauncherStyle.ApplyButtonStyle(alert.AddButton("Install"));
+        LauncherStyle.ApplyButtonStyle(alert.AddButton("Cancel"));
+        LauncherStyle.ApplyButtonStyle(alert.AddButton("Review license"));
         nint choice = alert.RunSheetModal(_window);
         if (choice == 1002)
         {

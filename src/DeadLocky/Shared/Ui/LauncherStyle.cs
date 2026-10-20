@@ -20,18 +20,34 @@ internal static class LauncherStyle
             ControlSize = NSControlSize.Large,
             TranslatesAutoresizingMaskIntoConstraints = false
         };
-        if (primary)
-        {
-            button.BezelColor = Accent;
-        }
+        ApplyButtonStyle(button, primary);
+        return button;
+    }
 
+    public static void ApplyButtonStyle(NSButton button, bool primary = false)
+    {
+        button.BezelColor = primary ? Accent : null;
+        button.BezelStyle = NSBezelStyle.Rounded;
         if (!OperatingSystem.IsMacOSVersionAtLeast(26))
         {
-            return button;
+            return;
         }
 
         button.BezelStyle = NSBezelStyle.Glass;
         button.TintProminence = primary ? NSTintProminence.Primary : NSTintProminence.Secondary;
+    }
+
+    public static NSButton IconButton(string symbol, string label)
+    {
+        NSButton button = Button(label);
+        button.Image = NSImage.GetSystemSymbol(symbol, null);
+        button.ImagePosition = NSCellImagePosition.ImageOnly;
+        button.ToolTip = label;
+        NSLayoutConstraint.ActivateConstraints(
+        [
+            button.WidthAnchor.ConstraintEqualTo(36),
+            button.HeightAnchor.ConstraintEqualTo(32)
+        ]);
         return button;
     }
 

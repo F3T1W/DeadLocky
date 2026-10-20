@@ -29,6 +29,7 @@ public sealed class GamePreparationView : NSStackView
     private readonly PreparationRow _steam = new("Steam account", "Sign in");
     private bool _disposed;
     private bool _gameRunning;
+    private bool _externalBusy;
     private Func<Task>? _openSteamAccount;
     private Func<Task<bool>>? _prepareSteamRuntime;
 
@@ -87,6 +88,7 @@ public sealed class GamePreparationView : NSStackView
     }
 
     public string DirectoryPath => _controller.State.Directory.Path;
+    public bool IsBusy => _controller.State.IsBusy;
     public bool IsDownloaded => _controller.State.IsDownloaded;
 
     public bool IsInstallationBusy => _controller.State.Action
@@ -118,6 +120,12 @@ public sealed class GamePreparationView : NSStackView
         Render();
     }
 
+    public void SetExternalBusy(bool busy)
+    {
+        _externalBusy = busy;
+        Render();
+    }
+
     protected override void Dispose(bool disposing)
     {
         if (disposing && !_disposed)
@@ -140,7 +148,7 @@ public sealed class GamePreparationView : NSStackView
 
     private async Task OnSteamAsync()
     {
-        if (_gameRunning)
+        if (_gameRunning || _externalBusy)
         {
             return;
         }
@@ -242,13 +250,13 @@ public sealed class GamePreparationView : NSStackView
         _steam.Button.Title = signingIn ? "Cancel"
             : state.Account is null ? "Sign in"
             : "Manage Steam";
-        _steam.Button.Enabled = !_gameRunning && (!state.IsBusy || signingIn);
-        _folder.Button.Enabled = !_gameRunning && !state.IsBusy;
+        _steam.Button.Enabled = !_gameRunning && !_externalBusy && (!state.IsBusy || signingIn);
+        _folder.Button.Enabled = !_gameRunning && !_externalBusy && !state.IsBusy;
         _game.Button.Title = state.Action == PreparationAction.Downloading
             ? "Stop waiting"
             : "Download";
         _game.Button.Hidden = state.IsDownloaded;
-        _game.Button.Enabled = !_gameRunning && !state.IsDownloaded && (state.Action == PreparationAction.Downloading
+        _game.Button.Enabled = !_gameRunning && !_externalBusy && !state.IsDownloaded && (state.Action == PreparationAction.Downloading
                                                                         || state is
                                                                         {
                                                                             IsBusy: false, Account: not null

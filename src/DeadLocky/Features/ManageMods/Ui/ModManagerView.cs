@@ -197,8 +197,8 @@ public sealed partial class ModManagerView : NSView
         alert.MessageText = title;
         alert.InformativeText = "Choose a unique profile name.";
         alert.AccessoryView = input;
-        _ = alert.AddButton("Save");
-        _ = alert.AddButton("Cancel");
+        LauncherStyle.ApplyButtonStyle(alert.AddButton("Save"));
+        LauncherStyle.ApplyButtonStyle(alert.AddButton("Cancel"));
         return alert.RunSheetModal(_owner) == 1000 ? input.StringValue : null;
     }
 

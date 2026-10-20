@@ -1,6 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <TargetFrameworks>net10.0-macos;net10.0</TargetFrameworks>
+    <DefaultItemExcludes>$(DefaultItemExcludes);bin/**;obj/**</DefaultItemExcludes>
   </PropertyGroup>
   <PropertyGroup Condition="'$(TargetFramework)' == 'net10.0-macos'">
     <OutputType>Exe</OutputType>
@@ -13,10 +14,14 @@
   <ItemGroup Condition="'$(TargetFramework)' == 'net10.0-macos'">
     <BundleResource Include="../../docs/ThirdPartyNotices.txt" LogicalName="ThirdPartyNotices.txt"/>
     <BundleResource Include="../../LICENSE" LogicalName="LICENSE"/>
+    <BundleResource Include="App/Assets/AppIcon.icns" LogicalName="AppIcon.icns"/>
   </ItemGroup>
   <ItemGroup Condition="'$(TargetFramework)' == 'net10.0'">
     <Compile Remove="App/**/*.cs;Pages/**/*.cs;Features/*/Ui/**/*.cs;Shared/Ui/**/*.cs"/>
     <Compile Remove="Shared/Api/Directories/AppKitDirectoryPicker.cs"/>
+  </ItemGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="Features/UpdateApp/Api/InstallUpdate.sh" LogicalName="DeadLocky.InstallUpdate.sh"/>
   </ItemGroup>
   <ItemGroup>
     <InternalsVisibleTo Include="DeadLocky.UnitTests"/>

@@ -253,8 +253,8 @@ public sealed partial class ModManagerView
         alert.MessageText = mod.Name;
         alert.InformativeText =
             $"By {mod.Author} · {mod.Category}\n\n" + description[..Math.Min(description.Length, 3000)];
-        _ = alert.AddButton("Close");
-        _ = alert.AddButton("Open GameBanana page");
+        LauncherStyle.ApplyButtonStyle(alert.AddButton("Close"));
+        LauncherStyle.ApplyButtonStyle(alert.AddButton("Open GameBanana page"));
         if (alert.RunSheetModal(_owner) == 1001 && Uri.TryCreate(mod.RemoteUrl, UriKind.Absolute, out Uri? uri) &&
             uri.Scheme == Uri.UriSchemeHttps)
         {
@@ -302,13 +302,14 @@ public sealed partial class ModManagerView
     private ModDownload? ChooseDownload(ModDownload[] downloads)
     {
         using var popup = new NSPopUpButton(new CGRect(0, 0, 420, 32), false);
+        LauncherStyle.ApplyButtonStyle(popup);
         popup.AddItems([.. downloads.Select(static file => $"{file.Name} ({file.Size / 1048576d:F1} MiB)")]);
         using var alert = new NSAlert();
         alert.MessageText = "Choose a download";
         alert.AccessoryView = popup;
         alert.InformativeText = "Select the author's file or variant you want to install.";
-        _ = alert.AddButton("Download");
-        _ = alert.AddButton("Cancel");
+        LauncherStyle.ApplyButtonStyle(alert.AddButton("Download"));
+        LauncherStyle.ApplyButtonStyle(alert.AddButton("Cancel"));
         return alert.RunSheetModal(_owner) == 1000 ? downloads[(int)popup.IndexOfSelectedItem] : null;
     }
 
@@ -345,8 +346,8 @@ public sealed partial class ModManagerView
         alert.AccessoryView = scroll;
         alert.InformativeText = "Archives may contain alternative skins. Select the VPKs you want to enable together." +
                                 " Referenced multipart data files are included automatically.";
-        _ = alert.AddButton("Install selected");
-        _ = alert.AddButton("Cancel");
+        LauncherStyle.ApplyButtonStyle(alert.AddButton("Install selected"));
+        LauncherStyle.ApplyButtonStyle(alert.AddButton("Cancel"));
         return alert.RunSheetModal(_owner) == 1000
             ? [.. roots.Where((_, index) => buttons[index].State == NSCellStateValue.On)]
             : [];

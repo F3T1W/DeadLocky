@@ -18,6 +18,14 @@ and resolve all findings. Confirm a completed result of zero issues.
 Review dependency changes against `docs/ThirdPartyNotices.txt` before packaging.
 Update both bundle version fields in `src/DeadLocky/Info.plist` for a new release.
 
+Update assets must follow `DeadLocky-<version>-apple-silicon.dmg` with a semantic
+version tag such as `v0.2.0`. Always increment the version. The updater uses GitHub's
+asset digest, or the matching `.dmg.sha256` file if that digest is unavailable. It
+includes published previews and ignores equal or older versions. Keep the bundle ID
+unchanged to preserve macOS permissions and update identity checks. Developer ID
+builds must retain the same signing team. The source PNG and icon packaging script
+are described in `src/DeadLocky/App/Assets/README.md`.
+
 ## DMG
 
 ```sh
@@ -26,8 +34,8 @@ bash scripts/create-dmg.sh
 
 This publishes a fresh NativeAOT app, verifies its arm64 executable and code
 signature, and creates a compressed read-only image with an Applications shortcut,
-installation instructions and the project license. A separate output tree prevents
-stale managed Release artifacts from entering the image. It mounts the image,
+installation instructions and the project license. Separate output and intermediate trees prevent
+stale managed Release artifacts or cached bundle metadata from entering the image. It mounts the image,
 checks the copied app and shortcut, then ejects it. Generated files stay ignored
 under `artifacts/`.
 
