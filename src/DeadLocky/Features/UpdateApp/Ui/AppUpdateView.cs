@@ -1,5 +1,6 @@
 using DeadLocky.Features.UpdateApp.Api;
 using DeadLocky.Features.UpdateApp.Model;
+using DeadLocky.Shared.Api.Diagnostics;
 using DeadLocky.Shared.Ui;
 
 namespace DeadLocky.Features.UpdateApp.Ui;
@@ -105,10 +106,13 @@ public sealed class AppUpdateView : NSStackView
             AppRelease? release = await _client.FindUpdateAsync(_version, checkTimeout.Token);
             if (release is null)
             {
+                AppLog.Event("update.check.result", "up to date");
                 SetStatus($"{_version} · Up to date", "checkmark.circle");
                 return;
             }
 
+            AppLog.Event("update.check.result", "newer release available");
+            if (_gameBusy) { AppLog.Event("update.install", "deferred while application is busy"); }
             while (_gameBusy)
             {
                 SetStatus($"{release.Version} ready · Installs when idle", "arrow.down.circle");
@@ -139,6 +143,7 @@ public sealed class AppUpdateView : NSStackView
         }
         catch (OperationCanceledException)
         {
+            AppLog.Event("update.ui", "cancelled or timed out");
             if (!_lifetime.IsCancellationRequested)
             {
                 SetStatus("Update check timed out", "exclamationmark.circle");
@@ -146,6 +151,7 @@ public sealed class AppUpdateView : NSStackView
         }
         catch (Exception exception)
         {
+            AppLog.Event("update.ui", "failed", exception);
             if (!_disposed)
             {
                 SetStatus("Update failed · Click to retry", "exclamationmark.circle");

@@ -1,6 +1,7 @@
 using DeadLocky.Entities.Game.Model;
 using DeadLocky.Entities.Steam.Model;
 using DeadLocky.Features.PrepareGame.Model;
+using DeadLocky.Shared.Api.Diagnostics;
 
 namespace DeadLocky.Features.PrepareGame.Api;
 
@@ -29,9 +30,16 @@ public sealed class SteamClientPreparationService(
         _store.SaveDirectory(directory);
     }
 
-    public async Task<bool> IsDownloadedAsync(GameDirectory directory, CancellationToken cancellationToken)
+    public Task<bool> IsDownloadedAsync(GameDirectory directory, CancellationToken cancellationToken)
     {
-        return isInstalled(directory.Path) || await InstallationStore.IsDownloadedAsync(directory, cancellationToken);
+        return AppLog.RunAsync("game.installation.verify", () => IsDownloadedCoreAsync(directory, cancellationToken));
+    }
+
+    private async Task<bool> IsDownloadedCoreAsync(GameDirectory directory, CancellationToken cancellationToken)
+    {
+        bool ready = isInstalled(directory.Path) || await InstallationStore.IsDownloadedAsync(directory, cancellationToken);
+        AppLog.Event("game.installation.result", ready ? "verified" : "not installed or verification failed");
+        return ready;
     }
 
     public Task<SteamAccount?> RestoreSessionAsync(CancellationToken cancellationToken)

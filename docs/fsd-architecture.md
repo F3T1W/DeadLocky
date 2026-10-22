@@ -84,3 +84,7 @@ its busy state with game preparation, launching and mod installation. The compos
 root supplies the installed bundle path and version. Application termination waits for
 update cancellation, and startup confirms a successful replacement after the main
 window opens. App updates do not access the game deployment transaction or profiles.
+
+## Problem reports
+
+`Shared/Api/Diagnostics` provides the bounded asynchronous ILogger sink and redacted log snapshots. `Features/ReportProblem` owns field validation, ZIP allowlisting, the Apps Script HTTP adapter and the native report window. `App` wires the menu, bundle endpoint and shutdown; `Pages/Launcher` pauses update installation while a report is open. No feature imports another feature for logging. See [ProblemReports.md](ProblemReports.md).

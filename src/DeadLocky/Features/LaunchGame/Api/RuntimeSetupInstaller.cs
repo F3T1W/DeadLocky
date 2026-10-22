@@ -1,4 +1,5 @@
 using DeadLocky.Features.LaunchGame.Model;
+using DeadLocky.Shared.Api.Diagnostics;
 
 namespace DeadLocky.Features.LaunchGame.Api;
 
@@ -38,7 +39,13 @@ internal sealed class RuntimeSetupInstaller(string root, RuntimeSetupPlatform? p
             token);
     }
 
-    public async Task<GameLaunchConfiguration> InstallAsync(string appleDownload,
+    public Task<GameLaunchConfiguration> InstallAsync(string appleDownload,
+        IProgress<RuntimeSetupProgress> progress, CancellationToken token)
+    {
+        return AppLog.RunAsync("runtime.install", () => InstallCoreAsync(appleDownload, progress, token));
+    }
+
+    private async Task<GameLaunchConfiguration> InstallCoreAsync(string appleDownload,
         IProgress<RuntimeSetupProgress> progress, CancellationToken token)
     {
         _ = Directory.CreateDirectory(root);

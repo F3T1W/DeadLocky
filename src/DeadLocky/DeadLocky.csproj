@@ -12,6 +12,8 @@
     <ApplicationId>org.milkdeadlockdry.launcher</ApplicationId>
   </PropertyGroup>
   <ItemGroup Condition="'$(TargetFramework)' == 'net10.0-macos'">
+    <!-- Track plist contents so incremental builds refresh the app bundle metadata. -->
+    <_CompileAppManifestInputFile Include="$(MSBuildProjectDirectory)/Info.plist"/>
     <BundleResource Include="../../docs/ThirdPartyNotices.txt" LogicalName="ThirdPartyNotices.txt"/>
     <BundleResource Include="../../LICENSE" LogicalName="LICENSE"/>
     <BundleResource Include="App/Assets/AppIcon.icns" LogicalName="AppIcon.icns"/>
@@ -27,6 +29,7 @@
     <InternalsVisibleTo Include="DeadLocky.UnitTests"/>
   </ItemGroup>
   <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.13"/>
     <PackageReference Include="SharpCompress" Version="0.50.5"/>
     <PackageReference Include="ValveResourceFormat" Version="20.1.7467"/>
   </ItemGroup>

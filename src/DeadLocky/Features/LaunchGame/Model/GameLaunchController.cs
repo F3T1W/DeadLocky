@@ -1,4 +1,5 @@
 using DeadLocky.Features.LaunchGame.Api;
+using DeadLocky.Shared.Api.Diagnostics;
 
 namespace DeadLocky.Features.LaunchGame.Model;
 
@@ -70,6 +71,7 @@ internal sealed class GameLaunchController(IGameLauncher launcher) : IDisposable
         }
         catch (Exception exception)
         {
+            AppLog.Event("game.controller", "failed", exception);
             Update(state => state with { IsStopping = false, Error = exception.Message });
             return false;
         }
@@ -88,6 +90,7 @@ internal sealed class GameLaunchController(IGameLauncher launcher) : IDisposable
         }
         catch (Exception exception)
         {
+            AppLog.Event("game.controller", "failed", exception);
             Update(state => state with { Error = exception.Message });
         }
     }
@@ -120,6 +123,7 @@ internal sealed class GameLaunchController(IGameLauncher launcher) : IDisposable
         }
         catch (Exception exception)
         {
+            AppLog.Event("game.controller", "failed", exception);
             Update(state => state with { Error = exception.Message });
         }
     }
@@ -147,6 +151,7 @@ internal sealed class GameLaunchController(IGameLauncher launcher) : IDisposable
         }
         catch (Exception exception)
         {
+            AppLog.Event("game.controller", "failed", exception);
             Update(state => state with { Error = exception.Message });
         }
         finally
@@ -183,6 +188,7 @@ internal sealed class GameLaunchController(IGameLauncher launcher) : IDisposable
         }
         catch (Exception exception)
         {
+            AppLog.Event("game.controller", "failed", exception);
             Update(state => state with { Error = exception.Message });
         }
         finally
@@ -205,6 +211,7 @@ internal sealed class GameLaunchController(IGameLauncher launcher) : IDisposable
         }
         catch (Exception exception)
         {
+            AppLog.Event("game.controller", "failed", exception);
             Update(state => state with { Error = exception.Message });
         }
     }
@@ -215,6 +222,7 @@ internal sealed class GameLaunchController(IGameLauncher launcher) : IDisposable
         {
             if (_disposed || _state.EmergencyStopRequested || _session is not null)
             {
+                AppLog.Event("game.session.result", "discarded stale session");
                 session.Dispose();
                 return;
             }
@@ -226,7 +234,7 @@ internal sealed class GameLaunchController(IGameLauncher launcher) : IDisposable
         StateChanged?.Invoke(this, EventArgs.Empty);
         try
         {
-            await session.Completion.WaitAsync(_lifetime.Token);
+            await AppLog.RunAsync("game.session", () => session.Completion.WaitAsync(_lifetime.Token));
         }
         finally
         {

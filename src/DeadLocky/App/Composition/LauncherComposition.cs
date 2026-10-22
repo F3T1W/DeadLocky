@@ -1,9 +1,14 @@
+using System.Runtime.InteropServices;
 using DeadLocky.Features.LaunchGame.Api;
 using DeadLocky.Features.ManageMods.Api;
 using DeadLocky.Features.PrepareGame.Api;
+using DeadLocky.Features.ReportProblem.Api;
+using DeadLocky.Features.ReportProblem.Model;
+using DeadLocky.Features.ReportProblem.Ui;
 using DeadLocky.Features.UpdateApp.Api;
 using DeadLocky.Features.UpdateApp.Model;
 using DeadLocky.Pages.Launcher.Ui;
+using DeadLocky.Shared.Api.Diagnostics;
 using DeadLocky.Shared.Api.Directories;
 
 namespace DeadLocky.App.Composition;
@@ -35,6 +40,27 @@ internal static class LauncherComposition
             new MacUpdateInstaller(NSBundle.MainBundle.BundlePath,
                 Path.Combine(Path.GetDirectoryName(settings)!, "Updates")), version);
         return window;
+    }
+
+    public static ReportWindowController CreateReporter()
+    {
+        DiagnosticLog log = AppLog.Current ?? throw new InvalidOperationException("Logging is not initialized.");
+        string home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        var metadata = new ReportMetadata(
+            NSBundle.MainBundle.InfoDictionary?["CFBundleShortVersionString"]?.ToString() ?? "unknown",
+            NSBundle.MainBundle.InfoDictionary?["CFBundleVersion"]?.ToString() ?? "unknown",
+            RuntimeInformation.OSDescription, RuntimeInformation.FrameworkDescription,
+            RuntimeInformation.ProcessArchitecture.ToString(), log.SessionId);
+        ReportClient client;
+        try { client = new ReportClient(NSBundle.MainBundle.InfoDictionary?["DeadLockyReportEndpoint"]?.ToString()); }
+        catch (ArgumentException exception)
+        {
+            AppLog.Event("report.configuration", "invalid endpoint; sending disabled", exception);
+            client = new ReportClient(null);
+        }
+
+        return new ReportWindowController(new ReportArchive(log,
+            Path.Combine(home, "Library", "Caches", "DeadLocky", "Reports")), client, metadata);
     }
 
     private sealed class LauncherServices

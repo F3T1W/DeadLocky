@@ -1,6 +1,9 @@
+using System.Runtime.InteropServices;
 using DeadLocky.App.Composition;
 using DeadLocky.App.Ui;
+using DeadLocky.Features.ReportProblem.Ui;
 using DeadLocky.Pages.Launcher.Ui;
+using DeadLocky.Shared.Api.Diagnostics;
 
 namespace DeadLocky.App.EntryPoint;
 
@@ -8,13 +11,24 @@ namespace DeadLocky.App.EntryPoint;
 internal sealed class AppDelegate : NSApplicationDelegate
 {
     private bool _terminationPending;
+    private ReportWindowController? _reports;
     private LauncherWindowController? _mainWindowController;
 
     public override void DidFinishLaunching(NSNotification notification)
     {
+        AppLog.Start(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+            "Library", "Logs", "DeadLocky"));
+        AppDomain.CurrentDomain.UnhandledException += OnUnhandledException;
+        TaskScheduler.UnobservedTaskException += OnUnobservedException;
+        AppLog.Event("session.environment", $"app={NSBundle.MainBundle.InfoDictionary?["CFBundleShortVersionString"]}; "
+            + $"build={NSBundle.MainBundle.InfoDictionary?["CFBundleVersion"]}; os={RuntimeInformation.OSDescription}; "
+            + $"runtime={RuntimeInformation.FrameworkDescription}; architecture={RuntimeInformation.ProcessArchitecture}");
         NSApplication.SharedApplication.ActivationPolicy = NSApplicationActivationPolicy.Regular;
-        ApplicationMenu.Install();
+        ApplicationMenu.Install(RequestQuitAsync);
         _mainWindowController = LauncherComposition.CreateLauncher();
+        _reports = LauncherComposition.CreateReporter();
+        _reports.StateChanged += OnReportStateChanged;
+        ApplicationMenu.ConfigureReports(_reports.ShowReport);
         ApplicationMenu.ConfigureEnvironmentSetup(_mainWindowController.ShowRuntimeSetupAsync);
 
 #if DEBUG
@@ -24,15 +38,11 @@ internal sealed class AppDelegate : NSApplicationDelegate
         _mainWindowController.ShowWindow(this);
         _mainWindowController.StartUpdates();
         NSApplication.SharedApplication.Activate();
+        AppLog.Event("ui.ready", "ready");
     }
 
     public override NSApplicationTerminateReply ApplicationShouldTerminate(NSApplication sender)
     {
-        if (_mainWindowController?.IsUpdating != true)
-        {
-            return NSApplicationTerminateReply.Now;
-        }
-
         if (_terminationPending)
         {
             return NSApplicationTerminateReply.Later;
@@ -43,16 +53,40 @@ internal sealed class AppDelegate : NSApplicationDelegate
         return NSApplicationTerminateReply.Later;
     }
 
+    private async Task RequestQuitAsync()
+    {
+        // Cocoa's default terminate action does not dismiss an active save panel.
+        if (_reports is not null) { await _reports.StopAsync(); }
+        NSApplication.SharedApplication.Terminate(this);
+    }
+
     private async Task FinishTerminationAsync(NSApplication sender)
     {
         try
         {
-            await _mainWindowController!.StopUpdatesAsync();
+            if (_reports is not null) { await _reports.StopAsync(); }
+            if (_mainWindowController is not null) { await _mainWindowController.StopUpdatesAsync(); }
+            await AppLog.StopAsync();
         }
         finally
         {
             sender.ReplyToApplicationShouldTerminate(true);
         }
+    }
+
+    private void OnReportStateChanged(object? sender, EventArgs args)
+    {
+        _mainWindowController?.SetReportBusy(_reports is { IsOpen: true } or { IsBusy: true });
+    }
+
+    private static void OnUnhandledException(object sender, UnhandledExceptionEventArgs args)
+    {
+        AppLog.Event("session.unhandled", "unhandled exception observed", args.ExceptionObject as Exception);
+    }
+
+    private static void OnUnobservedException(object? sender, UnobservedTaskExceptionEventArgs args)
+    {
+        AppLog.Event("task.unobserved", "unobserved exception observed", args.Exception);
     }
 
     public override bool ApplicationShouldTerminateAfterLastWindowClosed(NSApplication sender)
@@ -62,6 +96,14 @@ internal sealed class AppDelegate : NSApplicationDelegate
 
     public override void WillTerminate(NSNotification notification)
     {
+        AppDomain.CurrentDomain.UnhandledException -= OnUnhandledException;
+        TaskScheduler.UnobservedTaskException -= OnUnobservedException;
+        if (_reports is not null)
+        {
+            _reports.StateChanged -= OnReportStateChanged;
+            _reports.Dispose();
+            _reports = null;
+        }
         _mainWindowController?.Dispose();
         _mainWindowController = null;
     }

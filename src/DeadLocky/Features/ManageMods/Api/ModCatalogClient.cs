@@ -1,6 +1,7 @@
 using System.Net;
 using System.Text.Json;
 using DeadLocky.Features.ManageMods.Model;
+using DeadLocky.Shared.Api.Diagnostics;
 
 namespace DeadLocky.Features.ManageMods.Api;
 
@@ -23,28 +24,46 @@ public sealed class ModCatalogClient(HttpClient http, string cachePath) : IDispo
         }
         catch (Exception exception) when (exception is IOException or JsonException)
         {
+            AppLog.Event("catalog.cache.read", "failed", exception);
             return [];
         }
     }
 
-    public async Task<CatalogMod[]> RefreshAsync(CancellationToken token)
+    public Task<CatalogMod[]> RefreshAsync(CancellationToken token)
+    {
+        return AppLog.RunAsync("catalog.refresh", () => RefreshCoreAsync(token));
+    }
+
+    private async Task<CatalogMod[]> RefreshCoreAsync(CancellationToken token)
     {
         byte[] bytes = await GetBytesAsync(Api + "mods", 64 * 1024 * 1024, token);
         CatalogMod[] mods = JsonSerializer.Deserialize(bytes, ModJsonContext.Default.CatalogModArray)
                             ?? throw new IOException("The catalog returned an empty response.");
         _ = Directory.CreateDirectory(Path.GetDirectoryName(cachePath)!);
         ModFiles.AtomicWrite(cachePath, bytes);
+        AppLog.Event("catalog.refresh.result", $"items={mods.Length}");
         return mods;
     }
 
-    public async Task<ModDownload[]> DownloadsAsync(string remoteId, CancellationToken token)
+    public Task<ModDownload[]> DownloadsAsync(string remoteId, CancellationToken token)
+    {
+        return AppLog.RunAsync("catalog.versions", () => DownloadsCoreAsync(remoteId, token));
+    }
+
+    private async Task<ModDownload[]> DownloadsCoreAsync(string remoteId, CancellationToken token)
     {
         byte[] bytes = await GetBytesAsync(Api + "mods/" + Uri.EscapeDataString(remoteId) + "/downloads",
             2 * 1024 * 1024, token);
         return JsonSerializer.Deserialize(bytes, ModJsonContext.Default.ModDownloads)?.Downloads ?? [];
     }
 
-    public async Task DownloadAsync(ModDownload download, string destination, IProgress<long>? progress,
+    public Task DownloadAsync(ModDownload download, string destination, IProgress<long>? progress,
+        CancellationToken token)
+    {
+        return AppLog.RunAsync("mod.download", () => DownloadCoreAsync(download, destination, progress, token));
+    }
+
+    private async Task DownloadCoreAsync(ModDownload download, string destination, IProgress<long>? progress,
         CancellationToken token)
     {
         RequireHttps(download.Url);
@@ -70,7 +89,12 @@ public sealed class ModCatalogClient(HttpClient http, string cachePath) : IDispo
         return GetBytesAsync(url, 8 * 1024 * 1024, token);
     }
 
-    private async Task<byte[]> GetBytesAsync(string url, int limit, CancellationToken token)
+    private Task<byte[]> GetBytesAsync(string url, int limit, CancellationToken token)
+    {
+        return AppLog.RunAsync("network.catalog", () => GetBytesCoreAsync(url, limit, token));
+    }
+
+    private async Task<byte[]> GetBytesCoreAsync(string url, int limit, CancellationToken token)
     {
         RequireHttps(url);
         using HttpResponseMessage response = await http.GetAsync(url, HttpCompletionOption.ResponseHeadersRead, token);

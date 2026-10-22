@@ -1,6 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using DeadLocky.Entities.Game.Model;
+using DeadLocky.Shared.Api.Diagnostics;
 
 namespace DeadLocky.Features.PrepareGame.Model;
 
@@ -32,6 +33,7 @@ internal sealed class InstallationStore(string settingsPath)
         }
         catch (Exception exception) when (exception is IOException or JsonException or UnauthorizedAccessException)
         {
+            AppLog.Event("installation.configuration", "failed", exception);
         }
 
         return new GameDirectory(Path.Combine(

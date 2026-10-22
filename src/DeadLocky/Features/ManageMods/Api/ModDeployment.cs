@@ -1,6 +1,7 @@
 using System.Text;
 using System.Text.Json;
 using DeadLocky.Entities.Mod.Model;
+using DeadLocky.Shared.Api.Diagnostics;
 
 namespace DeadLocky.Features.ManageMods.Api;
 
@@ -44,11 +45,10 @@ internal sealed class ModDeployment(string root, Action<string> ensureGameIdle)
             {
                 string source = Path.Combine(root, "Packages", package.Id.ToString("N"),
                     ModFiles.SafeRelativePath(file.Name));
-                if (conflicts.Add(package.Name, source, file.Resources) is { } conflict)
-                {
-                    throw new IOException($"Mod conflict: {conflict.FirstMod} and {conflict.SecondMod} contain "
-                                          + $"different content at {conflict.Resource}. Disable one of these mods.");
-                }
+                if (conflicts.Add(package.Name, source, file.Resources) is not { } conflict) { continue; }
+                AppLog.Event("mods.conflict", "different resource contents detected");
+                throw new IOException($"Mod conflict: {conflict.FirstMod} and {conflict.SecondMod} contain "
+                                      + $"different content at {conflict.Resource}. Disable one of these mods.");
             }
         }
 
@@ -147,6 +147,7 @@ internal sealed class ModDeployment(string root, Action<string> ensureGameIdle)
             if (journal.HadOwnedDirectory)
             {
                 Directory.Move(owned, backup);
+                AppLog.Event("mods.backup", "created");
             }
 
             if (enabled.Length > 0)
@@ -155,6 +156,7 @@ internal sealed class ModDeployment(string root, Action<string> ensureGameIdle)
             }
 
             ModFiles.AtomicWrite(config, patched);
+            AppLog.Event("mods.deployment", "files committed");
             ModFiles.WriteJson(JournalPath, journal with { Committed = true },
                 ModJsonContext.Default.DeploymentJournal);
             Recover();
@@ -205,6 +207,7 @@ internal sealed class ModDeployment(string root, Action<string> ensureGameIdle)
                 DeleteOwnedDirectory(owned);
                 ValidateOwnedDirectory(backup);
                 Directory.Move(backup, owned);
+                AppLog.Event("mods.recovery", "backup restored");
             }
             else if (!journal.HadOwnedDirectory)
             {
@@ -221,6 +224,7 @@ internal sealed class ModDeployment(string root, Action<string> ensureGameIdle)
                     : Encoding.GetBytes(GameSearchPaths.SetEnabled(
                         Encoding.GetString(current), journal.HadOwnedDirectory));
                 ModFiles.AtomicWrite(config, restored);
+                AppLog.Event("mods.recovery", "configuration restored");
             }
         }
 

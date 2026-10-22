@@ -25,6 +25,7 @@ public sealed class LauncherWindowController : NSWindowController
     private ModManagerView? _mods;
     private AppUpdateView? _updates;
     private bool _disposed;
+    private bool _reportBusy;
     private LaunchGameView? _launch;
     private bool _wasGameActive;
 
@@ -117,7 +118,11 @@ public sealed class LauncherWindowController : NSWindowController
         _launch?.SetProfileSummary(_mods.ProfileSummary);
     }
 
-    public bool IsUpdating => _updates?.HasOperation == true;
+    public void SetReportBusy(bool busy)
+    {
+        _reportBusy = busy;
+        OnPreparationChanged(this, EventArgs.Empty);
+    }
 
     public Task StopUpdatesAsync()
     {
@@ -200,7 +205,7 @@ public sealed class LauncherWindowController : NSWindowController
         _launch?.SetInstallation(_selection.DirectoryPath, _selection.IsDownloaded,
             _selection.IsInstallationBusy || _mods?.IsBusy == true || _updates?.IsBusy == true);
         _mods?.SetGameBusy(_launch?.IsActive == true || _selection.IsInstallationBusy || _updates?.IsBusy == true);
-        _updates?.SetGameBusy(_launch?.IsBusy == true || _selection.IsBusy || _mods?.IsBusy == true);
+        _updates?.SetGameBusy(_launch?.IsBusy == true || _selection.IsBusy || _mods?.IsBusy == true || _reportBusy);
         _selection.SetExternalBusy(_updates?.IsBusy == true);
     }
 
@@ -247,7 +252,7 @@ public sealed class LauncherWindowController : NSWindowController
         _wasGameActive = active;
         _selection.SetGameRunning(active);
         _mods?.SetGameBusy(active || _selection.IsInstallationBusy || _updates?.IsBusy == true);
-        _updates?.SetGameBusy(_launch?.IsBusy == true || _selection.IsBusy || _mods?.IsBusy == true);
+        _updates?.SetGameBusy(_launch?.IsBusy == true || _selection.IsBusy || _mods?.IsBusy == true || _reportBusy);
         if (finished)
         {
             _ = _selection.RefreshSteamClientAsync();

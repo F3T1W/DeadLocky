@@ -1,11 +1,17 @@
 using System.Text.RegularExpressions;
+using DeadLocky.Shared.Api.Diagnostics;
 using SharpCompress.Archives;
 
 namespace DeadLocky.Features.ManageMods.Api;
 
 internal static partial class ModPackageExtractor
 {
-    public static async Task<string[]> ExtractAsync(string source, string directory, CancellationToken token)
+    public static Task<string[]> ExtractAsync(string source, string directory, CancellationToken token)
+    {
+        return AppLog.RunAsync("mod.archive.extract", () => ExtractCoreAsync(source, directory, token));
+    }
+
+    private static async Task<string[]> ExtractCoreAsync(string source, string directory, CancellationToken token)
     {
         _ = Directory.CreateDirectory(directory);
         await using (FileStream stream = File.OpenRead(source))

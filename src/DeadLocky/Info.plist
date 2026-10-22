@@ -20,6 +20,8 @@
         <string>APPL</string>
         <key>NSMicrophoneUsageDescription</key>
         <string>Deadlock uses your microphone for in-game voice chat.</string>
+        <key>DeadLockyReportEndpoint</key>
+        <string>https://script.google.com/macros/s/AKfycbzT1HG3PKVAI6ouqBmL0bBsC1C8FiJWHne7au3WW8jn_2KE6LaYxf-ajOQS1ouc5WyG/exec</string>
         <key>NSPrincipalClass</key>
         <string>NSApplication</string>
         <key>NSHighResolutionCapable</key>

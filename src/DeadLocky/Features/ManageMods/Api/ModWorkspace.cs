@@ -1,6 +1,8 @@
+using System.Runtime.CompilerServices;
 using System.Text.Json;
 using DeadLocky.Entities.Mod.Model;
 using DeadLocky.Features.ManageMods.Model;
+using DeadLocky.Shared.Api.Diagnostics;
 
 namespace DeadLocky.Features.ManageMods.Api;
 
@@ -96,7 +98,7 @@ public sealed class ModWorkspace : IAsyncDisposable
                     ? mod with { Enabled = enabled }
                     : mod)
             ]
-        }, token);
+        }, token, enabled ? "enable" : "disable");
     }
 
     public Task RemoveAsync(Guid profileId, Guid packageId, CancellationToken token)
@@ -123,7 +125,13 @@ public sealed class ModWorkspace : IAsyncDisposable
         }, token);
     }
 
-    public async Task<PreparedMod> PrepareAsync(ModCatalogClient catalog, ModDownload download,
+    public Task<PreparedMod> PrepareAsync(ModCatalogClient catalog, ModDownload download,
+        IProgress<long>? progress, CancellationToken token)
+    {
+        return AppLog.RunAsync("mod.prepare", () => PrepareCoreAsync(catalog, download, progress, token));
+    }
+
+    private async Task<PreparedMod> PrepareCoreAsync(ModCatalogClient catalog, ModDownload download,
         IProgress<long>? progress, CancellationToken token)
     {
         var id = Guid.NewGuid();
@@ -172,6 +180,7 @@ public sealed class ModWorkspace : IAsyncDisposable
                 throw new IOException("Select at least one valid VPK file.");
             }
 
+            AppLog.Event("mod.requirements.verify", "validated");
             string expected = Path.Combine(_root, "Downloads", prepared.Id.ToString("N"), "Content");
             if (Path.GetFullPath(prepared.Directory) != expected)
             {
@@ -192,6 +201,7 @@ public sealed class ModWorkspace : IAsyncDisposable
                                           + "Choose only one variant.");
                 }
 
+                AppLog.Event("mod.vpk.verify", "validated");
                 files.Add(new ModPackageFile(name, ModFiles.Hash(source), contents.Resources,
                     contents.Parts.ToDictionary(part => ModFiles.SafeRelativePath(Path.GetRelativePath(expected, part)),
                         ModFiles.Hash, StringComparer.OrdinalIgnoreCase)));
@@ -243,7 +253,7 @@ public sealed class ModWorkspace : IAsyncDisposable
         }, token), token);
     }
 
-    private Task ChangeProfileAsync(Guid id, Func<ModProfile, ModProfile> change, CancellationToken token)
+    private Task ChangeProfileAsync(Guid id, Func<ModProfile, ModProfile> change, CancellationToken token, [CallerMemberName] string stage = "")
     {
         return ChangeAsync(library =>
         {
@@ -252,16 +262,16 @@ public sealed class ModWorkspace : IAsyncDisposable
             {
                 Profiles = [.. library.Profiles.Select(profile => profile.Id == id ? updated : profile)]
             };
-        }, token);
+        }, token, stage);
     }
 
-    private Task ChangeAsync(Func<ModLibrary, ModLibrary> change, CancellationToken token)
+    private Task ChangeAsync(Func<ModLibrary, ModLibrary> change, CancellationToken token, [CallerMemberName] string stage = "")
     {
         return WithLockAsync(() =>
         {
             Save(change(Read()));
             return Task.CompletedTask;
-        }, token);
+        }, token, stage);
     }
 
     private void Save(ModLibrary library)
@@ -269,7 +279,12 @@ public sealed class ModWorkspace : IAsyncDisposable
         ModFiles.WriteJson(Path.Combine(_root, "library.json"), library, ModJsonContext.Default.ModLibrary);
     }
 
-    private async Task WithLockAsync(Func<Task> action, CancellationToken token)
+    private Task WithLockAsync(Func<Task> action, CancellationToken token, [CallerMemberName] string stage = "")
+    {
+        return AppLog.RunAsync("mods." + stage, () => WithLockCoreAsync(action, token));
+    }
+
+    private async Task WithLockCoreAsync(Func<Task> action, CancellationToken token)
     {
         await _gate.WaitAsync(token);
         try

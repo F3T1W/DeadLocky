@@ -2,6 +2,7 @@ using System.Net;
 using System.Text.RegularExpressions;
 using DeadLocky.Entities.Mod.Model;
 using DeadLocky.Features.ManageMods.Model;
+using DeadLocky.Shared.Api.Diagnostics;
 using DeadLocky.Shared.Ui;
 
 namespace DeadLocky.Features.ManageMods.Ui;
@@ -32,6 +33,7 @@ public sealed partial class ModManagerView
         }
         catch (Exception exception)
         {
+            AppLog.Event("catalog.ui", "failed", exception);
             _status.TextColor = NSColor.SystemRed;
             _status.StringValue = (_mods.Length > 0 ? "Showing cached catalog. " : "") + exception.Message;
         }
@@ -231,10 +233,12 @@ public sealed partial class ModManagerView
                 image.Image = new NSImage(data);
                 image.ContentTintColor = null;
             }
+            else { AppLog.Event("catalog.thumbnail", "discarded stale result"); }
         }
         catch (Exception exception) when
             (exception is OperationCanceledException or HttpRequestException or IOException)
         {
+            AppLog.Event("catalog.ui", "failed", exception);
             // A missing thumbnail does not prevent browsing or installing the mod.
         }
         finally

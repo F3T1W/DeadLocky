@@ -1,6 +1,7 @@
 using DeadLocky.Entities.Mod.Model;
 using DeadLocky.Features.ManageMods.Api;
 using DeadLocky.Features.ManageMods.Model;
+using DeadLocky.Shared.Api.Diagnostics;
 using DeadLocky.Shared.Ui;
 
 namespace DeadLocky.Features.ManageMods.Ui;
@@ -142,6 +143,7 @@ public sealed partial class ModManagerView : NSView
         }
         catch (Exception exception)
         {
+            AppLog.Event("mods.ui.operation", "failed", exception);
             _status.TextColor = NSColor.SystemRed;
             _status.StringValue = exception.Message;
         }

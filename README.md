@@ -240,3 +240,7 @@ review of their licenses; the launcher does not redistribute Apple's download.
 DeadLocky is [MIT-licensed](LICENSE). Dependency licenses and notices are included
 in [ThirdPartyNotices.txt](docs/ThirdPartyNotices.txt) and in the app bundle.
 Steam, Deadlock, GPTK, Wine and downloaded mods retain their own terms.
+
+## Problem reports
+
+Use **DeadLocky → Report a problem…** to send recent redacted technical logs through the configured Google relay or export a ZIP, with an optional reply address. Reports are sent only when you choose Send report. See [logging, privacy and relay deployment](docs/ProblemReports.md).

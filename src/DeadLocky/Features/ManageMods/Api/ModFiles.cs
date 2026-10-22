@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Text.Json;
 using System.Text.Json.Serialization.Metadata;
+using DeadLocky.Shared.Api.Diagnostics;
 
 namespace DeadLocky.Features.ManageMods.Api;
 
@@ -55,6 +56,7 @@ internal static class ModFiles
             }
 
             File.Move(temporary, path, true);
+            AppLog.Event("files.atomic-write", "committed");
         }
         finally
         {

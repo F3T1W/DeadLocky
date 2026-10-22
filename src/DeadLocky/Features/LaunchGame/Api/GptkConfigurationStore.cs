@@ -1,6 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using DeadLocky.Features.LaunchGame.Model;
+using DeadLocky.Shared.Api.Diagnostics;
 
 namespace DeadLocky.Features.LaunchGame.Api;
 
@@ -27,6 +28,7 @@ internal sealed class GptkConfigurationStore(string path)
             try
             {
                 Validate(configuration);
+                AppLog.Event("runtime.discovery", "validated");
                 return configuration;
             }
             catch (IOException)
@@ -48,10 +50,12 @@ internal sealed class GptkConfigurationStore(string path)
                 Validate(configuration);
             }
 
+            AppLog.Event("runtime.configuration.read", configuration is null ? "empty" : "validated");
             return configuration;
         }
         catch (Exception exception) when (exception is IOException or JsonException or UnauthorizedAccessException)
         {
+            AppLog.Event("runtime.configuration.read", "failed", exception);
             return null;
         }
     }
@@ -65,6 +69,7 @@ internal sealed class GptkConfigurationStore(string path)
             File.WriteAllText(temporary, JsonSerializer.Serialize(configuration,
                 LaunchJsonContext.Default.GameLaunchConfiguration));
             File.Move(temporary, path, true);
+            AppLog.Event("runtime.configuration.write", "committed");
         }
         finally
         {

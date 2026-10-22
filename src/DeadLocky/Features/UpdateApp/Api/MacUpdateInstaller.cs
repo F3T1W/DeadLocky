@@ -3,6 +3,7 @@ using System.Security.Cryptography;
 using System.Text.Json;
 using System.Xml.Linq;
 using DeadLocky.Features.UpdateApp.Model;
+using DeadLocky.Shared.Api.Diagnostics;
 
 namespace DeadLocky.Features.UpdateApp.Api;
 
@@ -13,7 +14,13 @@ public sealed class MacUpdateInstaller(string application, string stateDirectory
     private readonly string _application = Path.GetFullPath(application);
     private readonly string _state = Path.GetFullPath(stateDirectory);
 
-    public async Task<PreparedAppUpdate> PrepareAsync(AppUpdateClient client, AppRelease release,
+    public Task<PreparedAppUpdate> PrepareAsync(AppUpdateClient client, AppRelease release,
+        IProgress<double> progress, CancellationToken token)
+    {
+        return AppLog.RunAsync("update.prepare", () => PrepareCoreAsync(client, release, progress, token));
+    }
+
+    private async Task<PreparedAppUpdate> PrepareCoreAsync(AppUpdateClient client, AppRelease release,
         IProgress<double> progress, CancellationToken token)
     {
         _ = Directory.CreateDirectory(_state);
@@ -206,6 +213,7 @@ public sealed class MacUpdateInstaller(string application, string stateDirectory
         }
         catch (Exception exception) when (exception is IOException or JsonException or UnauthorizedAccessException)
         {
+            AppLog.Event("update.confirm", "failed", exception);
             // A failed cleanup must not prevent the installed app from opening.
         }
     }

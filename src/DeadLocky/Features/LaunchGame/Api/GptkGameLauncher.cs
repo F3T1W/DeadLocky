@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using DeadLocky.Entities.Steam.Model;
 using DeadLocky.Features.LaunchGame.Model;
+using DeadLocky.Shared.Api.Diagnostics;
 
 namespace DeadLocky.Features.LaunchGame.Api;
 
@@ -28,7 +29,12 @@ public sealed class GptkGameLauncher : IGameLauncher, IGameExitPreferences, IRun
         RuntimeSetup = new RuntimeSetupInstaller(Path.GetDirectoryName(Path.GetFullPath(configurationPath))!);
     }
 
-    public async Task StopAsync(CancellationToken cancellationToken)
+    public Task StopAsync(CancellationToken cancellationToken)
+    {
+        return AppLog.RunAsync("game.emergency-stop", () => StopCoreAsync(cancellationToken));
+    }
+
+    private async Task StopCoreAsync(CancellationToken cancellationToken)
     {
         lock (_processStart)
         {
@@ -101,7 +107,12 @@ public sealed class GptkGameLauncher : IGameLauncher, IGameExitPreferences, IRun
         Configuration = configuration;
     }
 
-    public async Task OpenSteamAsync(CancellationToken cancellationToken)
+    public Task OpenSteamAsync(CancellationToken cancellationToken)
+    {
+        return AppLog.RunAsync("steam.launch", () => OpenSteamCoreAsync(cancellationToken));
+    }
+
+    private async Task OpenSteamCoreAsync(CancellationToken cancellationToken)
     {
         using var operation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _shutdown.Token);
         cancellationToken = operation.Token;
@@ -130,7 +141,12 @@ public sealed class GptkGameLauncher : IGameLauncher, IGameExitPreferences, IRun
         return running ? CreateSession(configuration, directory) : null;
     }
 
-    public async Task<IGameSession> LaunchAsync(string directory, CancellationToken cancellationToken)
+    public Task<IGameSession> LaunchAsync(string directory, CancellationToken cancellationToken)
+    {
+        return AppLog.RunAsync("game.launch", () => LaunchCoreAsync(directory, cancellationToken));
+    }
+
+    private async Task<IGameSession> LaunchCoreAsync(string directory, CancellationToken cancellationToken)
     {
         using var operation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _shutdown.Token);
         cancellationToken = operation.Token;
@@ -213,7 +229,12 @@ public sealed class GptkGameLauncher : IGameLauncher, IGameExitPreferences, IRun
                    directory);
     }
 
-    public async Task DownloadWithSteamAsync(string directory, CancellationToken token)
+    public Task DownloadWithSteamAsync(string directory, CancellationToken token)
+    {
+        return AppLog.RunAsync("game.download", () => DownloadWithSteamCoreAsync(directory, token));
+    }
+
+    private async Task DownloadWithSteamCoreAsync(string directory, CancellationToken token)
     {
         using var operation = CancellationTokenSource.CreateLinkedTokenSource(token, _shutdown.Token);
         token = operation.Token;

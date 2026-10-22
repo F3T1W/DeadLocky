@@ -4,6 +4,7 @@ using System.Net.Http.Headers;
 using System.Security.Cryptography;
 using System.Text.Json;
 using DeadLocky.Features.UpdateApp.Model;
+using DeadLocky.Shared.Api.Diagnostics;
 
 namespace DeadLocky.Features.UpdateApp.Api;
 
@@ -12,7 +13,12 @@ public sealed class AppUpdateClient(HttpClient http)
     private const long MaximumDownload = 512L * 1024 * 1024;
     private const string Repository = "F3T1W/DeadLocky";
 
-    public async Task<AppRelease?> FindUpdateAsync(AppVersion installed, CancellationToken token)
+    public Task<AppRelease?> FindUpdateAsync(AppVersion installed, CancellationToken token)
+    {
+        return AppLog.RunAsync("update.check", () => FindUpdateCoreAsync(installed, token));
+    }
+
+    private async Task<AppRelease?> FindUpdateCoreAsync(AppVersion installed, CancellationToken token)
     {
         // GitHub's /latest endpoint excludes previews; the first release is a preview too.
         List<GitHubRelease> releases = [];
@@ -99,7 +105,13 @@ public sealed class AppUpdateClient(HttpClient http)
         return value.Length == 64 && value.All(char.IsAsciiHexDigit);
     }
 
-    public async Task DownloadAsync(AppRelease release, string path, IProgress<double> progress,
+    public Task DownloadAsync(AppRelease release, string path, IProgress<double> progress,
+        CancellationToken token)
+    {
+        return AppLog.RunAsync("update.download", () => DownloadCoreAsync(release, path, progress, token));
+    }
+
+    private async Task DownloadCoreAsync(AppRelease release, string path, IProgress<double> progress,
         CancellationToken token)
     {
         // Validate again because callers can construct an AppRelease directly.

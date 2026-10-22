@@ -1,6 +1,7 @@
 using DeadLocky.Entities.Game.Model;
 using DeadLocky.Entities.Steam.Model;
 using DeadLocky.Features.PrepareGame.Api;
+using DeadLocky.Shared.Api.Diagnostics;
 using DeadLocky.Shared.Api.Directories;
 
 namespace DeadLocky.Features.PrepareGame.Model;
@@ -160,7 +161,7 @@ internal sealed class GamePreparationController : IDisposable
         StateChanged?.Invoke(this, EventArgs.Empty);
         try
         {
-            await operation(cancellation.Token);
+            await AppLog.RunAsync("game.preparation." + action, () => operation(cancellation.Token));
         }
         catch (OperationCanceledException) when (cancellation.IsCancellationRequested)
         {
@@ -193,6 +194,7 @@ internal sealed class GamePreparationController : IDisposable
         {
             if (_disposed)
             {
+                AppLog.Event("game.preparation.result", "discarded after disposal");
                 return;
             }
 

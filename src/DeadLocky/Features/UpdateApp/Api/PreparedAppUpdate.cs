@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Runtime.Versioning;
 using System.Security.Cryptography;
+using DeadLocky.Shared.Api.Diagnostics;
 
 namespace DeadLocky.Features.UpdateApp.Api;
 
@@ -10,7 +11,12 @@ public sealed class PreparedAppUpdate(string transaction, string pending, string
 {
     private bool _handedOff;
 
-    public async Task StartInstallerAsync(int processId, CancellationToken token)
+    public Task StartInstallerAsync(int processId, CancellationToken token)
+    {
+        return AppLog.RunAsync("update.installer.start", () => StartInstallerCoreAsync(processId, token));
+    }
+
+    private async Task StartInstallerCoreAsync(int processId, CancellationToken token)
     {
         if (_handedOff)
         {
