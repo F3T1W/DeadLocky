@@ -29,7 +29,8 @@ public sealed class ReportArchive(DiagnosticLog log, string temporaryRoot)
                 {
                     var manifest = new ReportManifest(report,
                         "Serialized log-writer barrier; log-only snapshot. No settings, game files, mods or crash reports.",
-                        [.. snapshot.Select(static file => new ReportLogFile(file.Name, file.Content.Length, file.Truncated))]);
+                        [.. snapshot.Select(static file => new ReportLogFile(file.Name, file.Content.Length, file.Truncated))],
+                        new ReportLoggingStatus(log.WriteFailed, log.DroppedEntries));
                     await using (Stream entry = await archive.CreateEntry("report.json").OpenAsync(token))
                     {
                         await JsonSerializer.SerializeAsync(entry, manifest, ReportJsonContext.Default.ReportManifest, token);

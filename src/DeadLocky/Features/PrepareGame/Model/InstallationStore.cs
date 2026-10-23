@@ -28,14 +28,17 @@ internal sealed class InstallationStore(string settingsPath)
             if (settings is not null && !string.IsNullOrWhiteSpace(settings.Directory)
                                      && Path.IsPathFullyQualified(settings.Directory))
             {
+                AppLog.Event("installation.configuration", "loaded", fields: AppLog.Data(("game.directory", settings.Directory)));
                 return new GameDirectory(settings.Directory);
             }
         }
         catch (Exception exception) when (exception is IOException or JsonException or UnauthorizedAccessException)
         {
-            AppLog.Event("installation.configuration", "failed", exception);
+            AppLog.Event("installation.configuration", "using defaults", exception,
+                level: exception is FileNotFoundException or DirectoryNotFoundException ? Microsoft.Extensions.Logging.LogLevel.Information : Microsoft.Extensions.Logging.LogLevel.Warning);
         }
 
+        AppLog.Event("installation.configuration", "using default game folder");
         return new GameDirectory(Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Games", "Deadlock"));
     }
@@ -45,6 +48,7 @@ internal sealed class InstallationStore(string settingsPath)
         _ = Directory.CreateDirectory(Path.GetDirectoryName(settingsPath)!);
         WriteAtomic(settingsPath, JsonSerializer.Serialize(new LauncherSettings(directory.Path),
             LauncherJsonContext.Default.LauncherSettings));
+        AppLog.Event("installation.configuration", "saved", fields: AppLog.Data(("game.directory", directory.Path)));
     }
 
     public static Task<bool> IsDownloadedAsync(GameDirectory directory, CancellationToken cancellationToken)
@@ -57,6 +61,7 @@ internal sealed class InstallationStore(string settingsPath)
                     LauncherJsonContext.Default.InstallationReceipt);
                 if (receipt is not { AppId: AppId, Files.Count: > 0 })
                 {
+                    AppLog.Event("game.receipt", "invalid app or empty file list");
                     return false;
                 }
 
@@ -69,10 +74,10 @@ internal sealed class InstallationStore(string settingsPath)
                     }
 
                     var info = new FileInfo(SafePath(directory.Path, file.Path));
-                    if (!info.Exists || info.Length != file.Size || info.LastWriteTimeUtc.Ticks != file.ModifiedTicks)
-                    {
-                        return false;
-                    }
+                    if (info.Exists && info.Length == file.Size && info.LastWriteTimeUtc.Ticks == file.ModifiedTicks) { continue; }
+                    AppLog.Event("game.receipt.file", "changed or missing", fields: AppLog.Data(("file.path", file.Path),
+                        ("file.exists", info.Exists), ("file.expectedBytes", file.Size), ("file.actualBytes", info.Exists ? info.Length : null)));
+                    return false;
                 }
 
                 return true;
@@ -80,6 +85,8 @@ internal sealed class InstallationStore(string settingsPath)
             catch (Exception exception) when (exception is IOException or JsonException
                                                   or UnauthorizedAccessException or ArgumentException)
             {
+                AppLog.Event("game.receipt", "unavailable", exception,
+                    level: exception is FileNotFoundException or DirectoryNotFoundException ? Microsoft.Extensions.Logging.LogLevel.Information : Microsoft.Extensions.Logging.LogLevel.Warning);
                 return false;
             }
         }, cancellationToken);

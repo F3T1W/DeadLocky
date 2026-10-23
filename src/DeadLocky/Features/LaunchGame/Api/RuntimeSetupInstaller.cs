@@ -42,7 +42,7 @@ internal sealed class RuntimeSetupInstaller(string root, RuntimeSetupPlatform? p
     public Task<GameLaunchConfiguration> InstallAsync(string appleDownload,
         IProgress<RuntimeSetupProgress> progress, CancellationToken token)
     {
-        return AppLog.RunAsync("runtime.install", () => InstallCoreAsync(appleDownload, progress, token));
+        return AppLog.RunAsync("runtime.install", () => InstallCoreAsync(appleDownload, progress, token), AppLog.Data(("runtime.root", root), ("runtime.appleDownload", appleDownload)));
     }
 
     private async Task<GameLaunchConfiguration> InstallCoreAsync(string appleDownload,
@@ -53,9 +53,12 @@ internal sealed class RuntimeSetupInstaller(string root, RuntimeSetupPlatform? p
             FileAccess.ReadWrite, FileShare.None);
         if (FindExisting() is { } existing)
         {
+            AppLog.Event("runtime.phase", "Ready");
             progress.Report(new RuntimeSetupProgress("Ready", "Your existing environment is ready.", 1));
             return existing;
         }
+
+        AppLog.Event("runtime.phase", "Check");
 
         progress.Report(new RuntimeSetupProgress("Check", "Checking your Mac…"));
         await _platform.CheckHostAsync(token);
@@ -63,6 +66,7 @@ internal sealed class RuntimeSetupInstaller(string root, RuntimeSetupPlatform? p
         timeout.CancelAfter(TimeSpan.FromMinutes(40));
         token = timeout.Token;
         await using var apple = new AppleGraphicsImport(_platform);
+        AppLog.Event("runtime.phase", "Apple graphics");
         progress.Report(new RuntimeSetupProgress("Apple graphics", "Finding graphics in your Apple download…"));
         string redist = await apple.ResolveAsync(appleDownload, token);
         string runtime = Path.Combine(root, "Runtime", "ManagedWine11-r21");
@@ -83,9 +87,12 @@ internal sealed class RuntimeSetupInstaller(string root, RuntimeSetupPlatform? p
             foreach ((RuntimeDownload download, string path) in new[]
                          { (Wine, wine), (Libraries, libraries), (Steam, steam) })
             {
+                AppLog.Event("runtime.phase", "Download");
                 progress.Report(new RuntimeSetupProgress("Download", $"Downloading {download.Name}…"));
                 await _platform.DownloadAsync(download, path, progress, token);
             }
+
+            AppLog.Event("runtime.phase", "Environment");
 
             progress.Report(new RuntimeSetupProgress("Environment", "Preparing your game environment…"));
             _ = await RunAsync("/usr/bin/tar", ["-xf", wine, "-C", work], token);
@@ -118,6 +125,7 @@ internal sealed class RuntimeSetupInstaller(string root, RuntimeSetupPlatform? p
             ownsPrefix = true;
             await File.WriteAllTextAsync(Path.Combine(prefix, ".deadlocky-owned"), "Steam-Managed", token);
             _ = await WineAsync(configuration, ["--version"], token);
+            AppLog.Event("runtime.phase", "Steam");
             progress.Report(new RuntimeSetupProgress("Steam", "Creating a private Steam environment…"));
             _ = await WineAsync(configuration, ["wineboot", "-u"], token);
             _ = await WineAsync(configuration,
@@ -130,17 +138,20 @@ internal sealed class RuntimeSetupInstaller(string root, RuntimeSetupPlatform? p
                 "reg", "add", @"HKCU\Software\Wine\WineDbg", "/v", "ShowCrashDialog", "/t", "REG_DWORD",
                 "/d", "0", "/f"
             ], token);
+            AppLog.Event("runtime.phase", "Steam");
             progress.Report(new RuntimeSetupProgress("Steam", "Installing Windows Steam…"));
             _ = await WineAsync(configuration, [steam, "/S"], token);
             GptkConfigurationStore.Validate(configuration);
             await StopAsync(configuration);
             token.ThrowIfCancellationRequested();
             await File.WriteAllTextAsync(Path.Combine(prefix, ".deadlocky-ready"), "1", token);
+            AppLog.Event("runtime.phase", "Ready");
             progress.Report(new RuntimeSetupProgress("Ready", "Environment ready. Sign in to Steam to continue.", 1));
             return configuration;
         }
-        catch
+        catch (Exception exception)
         {
+            AppLog.Event("runtime.rollback", "started", exception, fields: AppLog.Data(("runtime.ownsPrefix", ownsPrefix), ("runtime.ownsRuntime", ownsRuntime)));
             if (ownsPrefix)
             {
                 await StopAsync(configuration);
@@ -196,6 +207,7 @@ internal sealed class RuntimeSetupInstaller(string root, RuntimeSetupPlatform? p
 
     private Task<string> WineAsync(GameLaunchConfiguration configuration, string[] arguments, CancellationToken token)
     {
+        AppLog.Event("runtime.wine-step", arguments[0] is "--version" or "wineboot" or "reg" ? arguments[0] : "Steam installer");
         return _platform.RunAsync(configuration.WineExecutable, arguments, configuration.PrefixDirectory,
             Path.GetFullPath(Path.Combine(Path.GetDirectoryName(configuration.WineExecutable)!, "..", "lib")), token);
     }
@@ -210,8 +222,9 @@ internal sealed class RuntimeSetupInstaller(string root, RuntimeSetupPlatform? p
             {
                 _ = await _platform.RunAsync(server, ["-k"], configuration.PrefixDirectory, null, timeout.Token);
             }
-            catch (IOException)
+            catch (IOException exception)
             {
+                AppLog.Event("runtime.prefix-stop", "server command failed; scanning leftovers", exception);
             }
         }
 

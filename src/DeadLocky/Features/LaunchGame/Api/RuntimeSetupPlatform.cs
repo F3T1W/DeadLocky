@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Security.Cryptography;
 using DeadLocky.Features.LaunchGame.Model;
+using DeadLocky.Shared.Api.Diagnostics;
 
 namespace DeadLocky.Features.LaunchGame.Api;
 
@@ -33,12 +34,20 @@ internal class RuntimeSetupPlatform(HttpClient? client = null)
         }
     }
 
-    public virtual async Task DownloadAsync(RuntimeDownload download, string target,
+    public virtual Task DownloadAsync(RuntimeDownload download, string target,
+        IProgress<RuntimeSetupProgress> progress, CancellationToken token)
+    {
+        return AppLog.RunAsync("runtime.download", () => DownloadCoreAsync(download, target, progress, token),
+            AppLog.Data(("runtime.component", download.Name), ("download.destination", target)));
+    }
+
+    private async Task DownloadCoreAsync(RuntimeDownload download, string target,
         IProgress<RuntimeSetupProgress> progress, CancellationToken token)
     {
         _ = Directory.CreateDirectory(Path.GetDirectoryName(target)!);
         if (File.Exists(target) && await MatchesAsync(target, download.Sha256, token))
         {
+            AppLog.Event("runtime.download.cache", "checksum matched");
             return;
         }
 
@@ -47,7 +56,7 @@ internal class RuntimeSetupPlatform(HttpClient? client = null)
         {
             using var timeout = CancellationTokenSource.CreateLinkedTokenSource(token);
             timeout.CancelAfter(TimeSpan.FromMinutes(30));
-            using HttpResponseMessage response = await _client.GetAsync(download.Url,
+            using HttpResponseMessage response = await DiagnosticHttp.GetAsync(_client, download.Url,
                 HttpCompletionOption.ResponseHeadersRead, timeout.Token);
             _ = response.EnsureSuccessStatusCode();
             long? total = response.Content.Headers.ContentLength;
@@ -81,6 +90,7 @@ internal class RuntimeSetupPlatform(HttpClient? client = null)
             }
 
             File.Move(partial, target, true);
+            AppLog.Event("runtime.download.integrity", "verified", fields: AppLog.Data(("download.actualBytes", new FileInfo(target).Length)));
         }
         finally
         {
@@ -123,16 +133,18 @@ internal class RuntimeSetupPlatform(HttpClient? client = null)
             start.Environment["DYLD_FALLBACK_LIBRARY_PATH"] = libraryPath + ":/usr/lib";
         }
 
-        using Process process = Process.Start(start) ?? throw new IOException("Unable to start setup.");
+        using Process process = DiagnosticProcess.Start(start, "runtime.setup");
         process.StandardInput.Close();
         using var pipes = CancellationTokenSource.CreateLinkedTokenSource(token);
-        Task<string> output = process.StandardOutput.ReadToEndAsync(pipes.Token);
-        Task<string> error = process.StandardError.ReadToEndAsync(pipes.Token);
+        Task<string> output = DiagnosticProcess.ReadBoundedAsync(process.StandardOutput, 1024 * 1024, pipes.Token);
+        Task<string> error = DiagnosticProcess.ReadBoundedAsync(process.StandardError, 65536, pipes.Token);
         try
         {
             await process.WaitForExitAsync(token);
             string result = prefix is null ? await output : "";
+            // Prefix commands can leave background Wine services holding the pipes open.
             string details = prefix is null ? await error : "";
+            DiagnosticProcess.Stderr(details);
             return process.ExitCode == 0
                 ? result
                 : throw new IOException($"{Path.GetFileName(executable)} could not complete setup "

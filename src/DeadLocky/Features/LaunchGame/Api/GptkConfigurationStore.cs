@@ -28,11 +28,13 @@ internal sealed class GptkConfigurationStore(string path)
             try
             {
                 Validate(configuration);
-                AppLog.Event("runtime.discovery", "validated");
+                AppLog.Event("runtime.discovery", "validated", fields: AppLog.Data(("runtime.variant", runtime), ("wine.prefix", configuration.PrefixDirectory)));
                 return configuration;
             }
-            catch (IOException)
+            catch (IOException exception)
             {
+                AppLog.Event("runtime.discovery", "candidate unavailable", exception, fields: AppLog.Data(("runtime.variant", runtime)),
+                    level: Microsoft.Extensions.Logging.LogLevel.Information);
             }
         }
 
@@ -50,12 +52,14 @@ internal sealed class GptkConfigurationStore(string path)
                 Validate(configuration);
             }
 
-            AppLog.Event("runtime.configuration.read", configuration is null ? "empty" : "validated");
+            AppLog.Event("runtime.configuration.read", configuration is null ? "empty" : "validated",
+                fields: AppLog.Data(("wine.executable", configuration?.WineExecutable), ("wine.prefix", configuration?.PrefixDirectory)));
             return configuration;
         }
         catch (Exception exception) when (exception is IOException or JsonException or UnauthorizedAccessException)
         {
-            AppLog.Event("runtime.configuration.read", "failed", exception);
+            AppLog.Event("runtime.configuration.read", exception is FileNotFoundException or DirectoryNotFoundException ? "not configured" : "failed", exception,
+                level: exception is FileNotFoundException or DirectoryNotFoundException ? Microsoft.Extensions.Logging.LogLevel.Information : Microsoft.Extensions.Logging.LogLevel.Error);
             return null;
         }
     }

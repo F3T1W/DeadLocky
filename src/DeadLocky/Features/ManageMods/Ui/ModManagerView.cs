@@ -1,3 +1,4 @@
+using System.Runtime.CompilerServices;
 using DeadLocky.Entities.Mod.Model;
 using DeadLocky.Features.ManageMods.Api;
 using DeadLocky.Features.ManageMods.Model;
@@ -116,7 +117,7 @@ public sealed partial class ModManagerView : NSView
         RenderLibrary();
     }
 
-    private async Task OperateAsync(Func<CancellationToken, Task> action, string success)
+    private async Task OperateAsync(Func<CancellationToken, Task> action, string success, [CallerMemberName] string operation = "")
     {
         if (IsBusy || _gameBusy || _disposed)
         {
@@ -131,7 +132,8 @@ public sealed partial class ModManagerView : NSView
         {
             _status.TextColor = LauncherStyle.SecondaryText;
             _status.StringValue = "Working…";
-            await action(_lifetime.Token);
+            await AppLog.RunAsync("mods.ui." + operation, () => action(_lifetime.Token),
+                AppLog.Data(("profile.id", _library.ActiveProfileId)));
             _status.StringValue = success;
         }
         catch (OperationCanceledException)

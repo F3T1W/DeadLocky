@@ -111,6 +111,149 @@ public sealed class DiagnosticLogTests : IDisposable
         Assert.True(file.Content.Length <= 2 * 1024 * 1024);
     }
 
+    [Fact]
+    public async Task ParallelOperationsKeepTheirParentsAndRestoreScopes()
+    {
+        await using DiagnosticLog log = Create();
+        Guid parent;
+        using (LogContext.Push(AppLog.Data(("profile.id", "parent")), true))
+        {
+            parent = LogContext.Current!.OperationId;
+            List<Task> children = [];
+            for (int index = 0; index < 4; index++) { children.Add(WriteChildAsync(log, index)); }
+            await Task.WhenAll(children);
+            log.Record("parent", "restored");
+        }
+        Assert.Null(LogContext.Current);
+        LogEntry[] entries = await EntriesAsync(log);
+        foreach (IGrouping<Guid, LogEntry> operation in entries.Where(static entry => entry.Stage.StartsWith("child", StringComparison.Ordinal))
+                     .GroupBy(static entry => entry.OperationId))
+        {
+            Assert.Equal(2, operation.Count());
+            Assert.All(operation, entry => Assert.Equal(parent, entry.ParentOperationId));
+            _ = Assert.Single(operation.Select(static entry => entry.Fields["child"]).Distinct());
+        }
+        Assert.Equal(4, entries.Where(static entry => entry.Stage == "child.start").Select(static entry => entry.OperationId).Distinct().Count());
+        Assert.Equal(parent, Assert.Single(entries, static entry => entry.Stage == "parent").OperationId);
+        return;
+
+        static async Task WriteChildAsync(DiagnosticLog sink, int index)
+        {
+            using IDisposable scope = LogContext.Push(AppLog.Data(("child", index)), true);
+            sink.Record("child.start", "started");
+            await Task.Yield();
+            sink.Record("child.end", "succeeded");
+        }
+    }
+
+    [Fact]
+    public async Task SnapshotRedactsStructuredSecretsWithoutCorruptingJsonOrLosingContext()
+    {
+        await using DiagnosticLog log = Create();
+        log.Record("test", "Authorization: Bearer SuperSecret", fields: AppLog.Data(
+            ("accessToken", "OpaqueSecret"), ("replyTo", "reply@example.com"),
+            ("file.path", "/Users/test-person/Games/Deadlock"),
+            ("endpoint", "https://name:pass@example.com/private?token=hidden"),
+            ("detail", "a quote \" and newline\npassword=HiddenPassword"), ("count", 42)));
+        LogSnapshot[] snapshot = await log.SnapshotAsync(CancellationToken.None);
+        string text = Encoding.UTF8.GetString(Assert.Single(snapshot).Content);
+        foreach (string secret in new[] { "SuperSecret", "OpaqueSecret", "reply@example.com", "name:pass", "token=hidden", "HiddenPassword", "/Users/test-person" })
+        { Assert.DoesNotContain(secret, text); }
+        using var json = JsonDocument.Parse(text);
+        Assert.Equal("42", json.RootElement.GetProperty("Fields").GetProperty("count").GetString());
+        Assert.Equal(2, json.RootElement.GetProperty("SchemaVersion").GetInt32());
+    }
+
+    [Fact]
+    public async Task SnapshotResanitizesLegacyJsonFieldsAndExceptionStrings()
+    {
+        await using DiagnosticLog log = Create();
+        _ = await log.SnapshotAsync(CancellationToken.None);
+        string path = Path.Combine(_root, $"log-{Guid.NewGuid():N}-0000.jsonl");
+        const string legacy = """{"Timestamp":"2026-10-23T00:00:00Z","Severity":"Error","SessionId":"00000000-0000-0000-0000-000000000001","OperationId":"00000000-0000-0000-0000-000000000002","Stage":"legacy","DurationMs":0,"Result":"password=legacy-secret","Error":null}""";
+        await File.WriteAllTextAsync(path, legacy + "\n");
+        LogEntry entry = Assert.Single(await EntriesAsync(log));
+        Assert.Equal("legacy", entry.Stage);
+        Assert.DoesNotContain("legacy-secret", entry.Result);
+        Assert.Empty(entry.Fields);
+    }
+
+    [Fact]
+    public async Task StandardLoggerPreservesCategoryEventAndStructuredScopes()
+    {
+        await using DiagnosticLog log = Create();
+        Microsoft.Extensions.Logging.ILogger logger = log.CreateLogger("DeadLocky.Test");
+        using (logger.BeginScope(new Dictionary<string, object?> { ["profile.id"] = 123, ["password"] = "ScopeSecret" }))
+        {
+            logger.Log(Microsoft.Extensions.Logging.LogLevel.Warning, new Microsoft.Extensions.Logging.EventId(17, "Blocked"),
+                "operation", null, static (text, _) => text);
+            logger.Log(Microsoft.Extensions.Logging.LogLevel.None, default, "never", null, static (text, _) => text);
+        }
+        LogEntry entry = Assert.Single(await EntriesAsync(log));
+        Assert.Equal("DeadLocky.Test", entry.Fields["logger.category"]);
+        Assert.Equal("17", entry.Fields["event.id"]);
+        Assert.Equal("123", entry.Fields["profile.id"]);
+        Assert.Equal("[redacted]", entry.Fields["password"]);
+    }
+
+    [Fact]
+    public async Task NativeAndHttpErrorCodesSurviveWrapping()
+    {
+        await using DiagnosticLog log = Create();
+        log.Record("native", "failed", new IOException("wrapped", new System.ComponentModel.Win32Exception(13)), level: Microsoft.Extensions.Logging.LogLevel.Error);
+        log.Record("http", "failed", new HttpRequestException("denied", null, System.Net.HttpStatusCode.Forbidden));
+        LogEntry[] entries = await EntriesAsync(log);
+        Assert.Equal(13, Assert.Single(entries.Single(static entry => entry.Stage == "native").Error!.Inner!).NativeErrorCode);
+        Assert.Equal(403, entries.Single(static entry => entry.Stage == "http").Error!.HttpStatus);
+        Assert.NotEqual(0, entries[0].Error!.HResult);
+    }
+
+    [Fact]
+    public async Task QueueOverflowIsCountedAndLastFailureSurvivesFlood()
+    {
+        await using DiagnosticLog log = Create();
+        for (int index = 0; index < 10000; index++) { log.Record("flood", "entry"); }
+        log.Record("important.failure", "failed", new IOException("last failure"), level: Microsoft.Extensions.Logging.LogLevel.Error);
+        await log.FlushAsync(CancellationToken.None);
+        LogEntry[] entries = await EntriesAsync(log);
+        Assert.True(log.DroppedEntries > 0);
+        Assert.Contains(entries, static entry => entry.Stage == "logging.queue");
+        Assert.Contains(entries, static entry => entry is { Stage: "important.failure", Error: not null });
+    }
+
+    [Fact]
+    public async Task CancelledFlushAndInvalidDurationsCannotBreakWriter()
+    {
+        await using DiagnosticLog log = Create();
+        using var cancellation = new CancellationTokenSource();
+        await cancellation.CancelAsync();
+        _ = await Assert.ThrowsAnyAsync<OperationCanceledException>(() => log.FlushAsync(cancellation.Token));
+        log.Record("duration", "value", durationMs: double.NaN);
+        await log.FlushAsync(CancellationToken.None);
+        Assert.Equal(0, Assert.Single(await EntriesAsync(log)).DurationMs);
+        Assert.False(log.WriteFailed);
+    }
+
+    [Fact]
+    public async Task FieldAndExceptionBudgetsKeepEventsBounded()
+    {
+        await using DiagnosticLog log = Create();
+        var fields = new Dictionary<string, string?>();
+        for (int index = 0; index < 100; index++) { fields.Add("field" + index, new string('x', 5000)); }
+        log.Record("bounds", "value", new IOException(new string('e', 50000)), fields: fields);
+        LogEntry entry = Assert.Single(await EntriesAsync(log));
+        Assert.InRange(entry.Fields.Count, 1, 24);
+        Assert.True(entry.Fields.Sum(static pair => pair.Key.Length + pair.Value!.Length) < 4600);
+        Assert.InRange(entry.Error!.Message.Length, 1, 2100);
+    }
+
+    private static async Task<LogEntry[]> EntriesAsync(DiagnosticLog log)
+    {
+        LogSnapshot[] snapshot = await log.SnapshotAsync(CancellationToken.None);
+        return [.. snapshot.SelectMany(static file => Encoding.UTF8.GetString(file.Content).Split('\n', StringSplitOptions.RemoveEmptyEntries))
+            .Select(static line => JsonSerializer.Deserialize(line, LogJsonContext.Default.LogEntry)!)];
+    }
+
     private sealed class BrokenMessageException : Exception
     {
         public override string Message => throw new InvalidOperationException("Broken exception formatter.");
@@ -118,6 +261,6 @@ public sealed class DiagnosticLogTests : IDisposable
 
     private DiagnosticLog Create(int limit = 2 * 1024 * 1024, int retained = 6)
     { return new DiagnosticLog(_root, new LogPrivacy("/Users/test-person", "test-person"), limit, retained); }
-    private static int Count(SafeLogError error) { return 1 + error.Inner.Sum(Count); }
+    private static int Count(SafeLogError error) { return 1 + (error.Inner?.Sum(Count) ?? 0); }
     public void Dispose() { if (Directory.Exists(_root)) { Directory.Delete(_root, true); } }
 }

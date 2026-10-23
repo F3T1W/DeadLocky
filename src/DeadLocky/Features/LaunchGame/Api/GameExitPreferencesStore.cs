@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using DeadLocky.Shared.Api.Diagnostics;
 
 namespace DeadLocky.Features.LaunchGame.Api;
 
@@ -19,6 +20,7 @@ internal sealed class GameExitPreferencesStore(string path)
         }
         catch (Exception exception) when (exception is IOException or JsonException or UnauthorizedAccessException)
         {
+            AppLog.Event("game.exit-preferences", "using defaults", exception, level: Microsoft.Extensions.Logging.LogLevel.Information);
             return new GameExitPreferences();
         }
     }
@@ -32,6 +34,7 @@ internal sealed class GameExitPreferencesStore(string path)
             File.WriteAllText(temporary, JsonSerializer.Serialize(preferences,
                 ExitPreferencesJsonContext.Default.GameExitPreferences));
             File.Move(temporary, path, true);
+            AppLog.Event("game.exit-preferences", "saved", fields: AppLog.Data(("steam.closeAfterExit", preferences.CloseSteamAfterExit)));
         }
         finally
         {

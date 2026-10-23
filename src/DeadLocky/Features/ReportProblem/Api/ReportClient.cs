@@ -34,7 +34,8 @@ public sealed partial class ReportClient : IDisposable
     public Task SendAsync(ProblemReport report, string archive, CancellationToken token)
     {
         // ZIP I/O and base64/JSON preparation must not run on AppKit's synchronization context.
-        return Task.Run(() => SendCoreAsync(report, archive, token), token);
+        return AppLog.RunAsync("report.delivery", () => Task.Run(() => SendCoreAsync(report, archive, token), token),
+            AppLog.Data(("report.id", report.Id)));
     }
 
     private async Task SendCoreAsync(ProblemReport report, string archive, CancellationToken token)
@@ -53,7 +54,7 @@ public sealed partial class ReportClient : IDisposable
         using var request = new HttpRequestMessage(HttpMethod.Post, _endpoint);
         request.Content = new ByteArrayContent(json);
         request.Content.Headers.ContentType = new MediaTypeHeaderValue("application/json");
-        HttpResponseMessage response = await _http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, timeout.Token);
+        HttpResponseMessage response = await DiagnosticHttp.SendAsync(_http, request, HttpCompletionOption.ResponseHeadersRead, timeout.Token);
         try
         {
             for (int count = 0; (int)response.StatusCode is >= 300 and < 400; count++)
@@ -70,7 +71,7 @@ public sealed partial class ReportClient : IDisposable
                 response.Dispose();
                 // ContentService serves a receipt at a one-time GET URL. Never resend the POST body.
                 using var receiptRequest = new HttpRequestMessage(HttpMethod.Get, next);
-                response = await _http.SendAsync(receiptRequest, HttpCompletionOption.ResponseHeadersRead, timeout.Token);
+                response = await DiagnosticHttp.SendAsync(_http, receiptRequest, HttpCompletionOption.ResponseHeadersRead, timeout.Token);
             }
 
             if (!response.IsSuccessStatusCode || response.Content.Headers.ContentType?.MediaType != "application/json")
@@ -90,6 +91,8 @@ public sealed partial class ReportClient : IDisposable
 
             if (length > 8192) { throw new IOException("The report receipt is too large."); }
             ReportReceipt? receipt = JsonSerializer.Deserialize(buffer.AsSpan(0, length), ReportJsonContext.Default.ReportReceipt);
+            AppLog.Event("report.receipt", receipt is { Ok: true } && receipt.Id == report.Id ? "accepted" : "rejected",
+                fields: AppLog.Data(("report.receiptMatches", receipt?.Id == report.Id), ("report.serviceCode", receipt?.Error)));
             if (receipt is null || !receipt.Ok || receipt.Id != report.Id)
             {
                 string reason = receipt?.Error switch

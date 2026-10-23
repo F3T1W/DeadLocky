@@ -124,6 +124,8 @@ public sealed partial class ModManagerView
         _previous.Enabled = _page > 0;
         _next.Enabled = _page + 1 < pages;
         _pageLabel.StringValue = $"Page {_page + 1} of {pages} · {filtered.Length:N0} mods";
+        AppLog.Event("catalog.render", "filtered", fields: AppLog.Data(("catalog.total", _mods.Length),
+            ("catalog.matches", filtered.Length), ("catalog.page", _page + 1), ("catalog.pages", pages), ("catalog.hasSearch", _search.StringValue.Length > 0)));
         if (filtered.Length == 0)
         {
             AddRow(_catalogRows,

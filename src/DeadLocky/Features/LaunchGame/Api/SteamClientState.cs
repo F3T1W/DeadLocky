@@ -1,4 +1,5 @@
 using DeadLocky.Entities.Steam.Model;
+using DeadLocky.Shared.Api.Diagnostics;
 
 namespace DeadLocky.Features.LaunchGame.Api;
 
@@ -21,16 +22,25 @@ internal static class SteamClientState
         return string.IsNullOrWhiteSpace(name) ? null : new SteamAccount(id, name);
     }
 
-    public static bool IsInstalled(string steamDirectory, string directory)
+    public static bool IsInstalled(string steamDirectory, string directory, bool diagnose = false)
     {
         var state = SteamVdf.LoadAsText(ManifestPath(steamDirectory));
-        return state?["appid"].Value == "1422450" && state["StateFlags"].Value == "4"
-                                                  && state["installdir"].Value == "Deadlock"
-                                                  && MacGameProcessScanner.CanonicalPath(Path.Combine(steamDirectory,
-                                                      "steamapps", "common", "Deadlock"))
-                                                  == MacGameProcessScanner.CanonicalPath(directory)
-                                                  && File.Exists(Path.Combine(directory, "game", "bin", "win64",
-                                                      "deadlock.exe"));
+        bool appMatches = state?["appid"].Value == "1422450";
+        bool stateReady = state?["StateFlags"].Value == "4";
+        bool directoryMatches = state?["installdir"].Value == "Deadlock"
+                                && MacGameProcessScanner.CanonicalPath(Path.Combine(steamDirectory,
+                                    "steamapps", "common", "Deadlock")) == MacGameProcessScanner.CanonicalPath(directory);
+        bool executableExists = File.Exists(Path.Combine(directory, "game", "bin", "win64", "deadlock.exe"));
+        bool ready = appMatches && stateReady && directoryMatches && executableExists;
+        if (diagnose)
+        {
+            AppLog.Event("steam.installation.state", ready ? "ready" : "not ready", fields: AppLog.Data(
+                ("game.directory", directory), ("steam.manifestPresent", state is not null), ("steam.appMatches", appMatches),
+                ("steam.stateFlags", state?["StateFlags"].Value), ("steam.directoryMatches", directoryMatches),
+                ("game.executableExists", executableExists),
+                ("game.buildId", ulong.TryParse(state?["buildid"].Value, out ulong build) ? build : null)));
+        }
+        return ready;
     }
 
     public static string ManifestPath(string steamDirectory)

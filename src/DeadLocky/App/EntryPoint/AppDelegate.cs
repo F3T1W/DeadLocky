@@ -14,15 +14,25 @@ internal sealed class AppDelegate : NSApplicationDelegate
     private ReportWindowController? _reports;
     private LauncherWindowController? _mainWindowController;
 
-    public override void DidFinishLaunching(NSNotification notification)
+    public static void InitializeDiagnostics()
     {
         AppLog.Start(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
             "Library", "Logs", "DeadLocky"));
         AppDomain.CurrentDomain.UnhandledException += OnUnhandledException;
         TaskScheduler.UnobservedTaskException += OnUnobservedException;
+    }
+
+    public override void DidFinishLaunching(NSNotification notification)
+    {
         AppLog.Event("session.environment", $"app={NSBundle.MainBundle.InfoDictionary?["CFBundleShortVersionString"]}; "
             + $"build={NSBundle.MainBundle.InfoDictionary?["CFBundleVersion"]}; os={RuntimeInformation.OSDescription}; "
-            + $"runtime={RuntimeInformation.FrameworkDescription}; architecture={RuntimeInformation.ProcessArchitecture}");
+            + $"runtime={RuntimeInformation.FrameworkDescription}; architecture={RuntimeInformation.ProcessArchitecture}",
+            fields: AppLog.Data(("app.bundlePath", NSBundle.MainBundle.BundlePath),
+                ("app.nativeAot", !System.Runtime.CompilerServices.RuntimeFeature.IsDynamicCodeSupported),
+                ("host.osArchitecture", RuntimeInformation.OSArchitecture.ToString()),
+                ("host.processors", Environment.ProcessorCount), ("host.is64BitProcess", Environment.Is64BitProcess),
+                ("app.microphoneAuthorization", AVFoundation.AVCaptureDevice.GetAuthorizationStatus(AVFoundation.AVAuthorizationMediaType.Audio).ToString()),
+                ("app.microphonePurposeConfigured", !string.IsNullOrWhiteSpace(NSBundle.MainBundle.InfoDictionary?["NSMicrophoneUsageDescription"]?.ToString()))));
         NSApplication.SharedApplication.ActivationPolicy = NSApplicationActivationPolicy.Regular;
         ApplicationMenu.Install(RequestQuitAsync);
         _mainWindowController = LauncherComposition.CreateLauncher();
@@ -81,7 +91,14 @@ internal sealed class AppDelegate : NSApplicationDelegate
 
     private static void OnUnhandledException(object sender, UnhandledExceptionEventArgs args)
     {
-        AppLog.Event("session.unhandled", "unhandled exception observed", args.ExceptionObject as Exception);
+        AppLog.Event("session.unhandled", "unhandled exception observed", args.ExceptionObject as Exception,
+            fields: AppLog.Data(("session.terminating", args.IsTerminating)), level: Microsoft.Extensions.Logging.LogLevel.Critical);
+        try
+        {
+            using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(2));
+            AppLog.FlushAsync(timeout.Token).GetAwaiter().GetResult();
+        }
+        catch (Exception) { /* Fatal shutdown must not wait indefinitely for a failing disk. */ }
     }
 
     private static void OnUnobservedException(object? sender, UnobservedTaskExceptionEventArgs args)

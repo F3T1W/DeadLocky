@@ -31,7 +31,8 @@ public sealed partial record ProblemReport(Guid Id, string Message, string Email
 
 internal sealed record ReportPayload(ProblemReport Report, string Archive);
 internal sealed record ReportReceipt(bool Ok, Guid Id, string? Error);
-internal sealed record ReportManifest(ProblemReport Report, string SnapshotPolicy, ReportLogFile[] Logs);
+internal sealed record ReportManifest(ProblemReport Report, string SnapshotPolicy, ReportLogFile[] Logs, ReportLoggingStatus Logging);
+internal sealed record ReportLoggingStatus(bool WriteFailed, long DroppedEntries);
 internal sealed record ReportLogFile(string Name, int Bytes, bool Truncated);
 
 [JsonSourceGenerationOptions(PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase)]

@@ -243,4 +243,4 @@ Steam, Deadlock, GPTK, Wine and downloaded mods retain their own terms.
 
 ## Problem reports
 
-Use **DeadLocky → Report a problem…** to send recent redacted technical logs through the configured Google relay or export a ZIP, with an optional reply address. Reports are sent only when you choose Send report. See [logging, privacy and relay deployment](docs/ProblemReports.md).
+Use **DeadLocky → Report a problem…** to send recent redacted technical logs through the configured Google relay or export a ZIP, with an optional reply address. Reports are sent only when you choose Send report. Structured logs correlate Steam/runtime setup, game processes, network transfers, mod profiles/deployment/recovery and app updates; reports explicitly flag logging failures or dropped events. See [logging, privacy and relay deployment](docs/ProblemReports.md).

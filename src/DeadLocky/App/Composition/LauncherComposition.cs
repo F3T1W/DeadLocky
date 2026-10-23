@@ -59,6 +59,7 @@ internal static class LauncherComposition
             client = new ReportClient(null);
         }
 
+        AppLog.Event("report.configuration", client.IsConfigured ? "sending enabled" : "sending unavailable");
         return new ReportWindowController(new ReportArchive(log,
             Path.Combine(home, "Library", "Caches", "DeadLocky", "Reports")), client, metadata);
     }

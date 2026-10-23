@@ -47,7 +47,7 @@ public sealed class ModCatalogClient(HttpClient http, string cachePath) : IDispo
 
     public Task<ModDownload[]> DownloadsAsync(string remoteId, CancellationToken token)
     {
-        return AppLog.RunAsync("catalog.versions", () => DownloadsCoreAsync(remoteId, token));
+        return AppLog.RunAsync("catalog.versions", () => DownloadsCoreAsync(remoteId, token), AppLog.Data(("mod.remoteId", remoteId)));
     }
 
     private async Task<ModDownload[]> DownloadsCoreAsync(string remoteId, CancellationToken token)
@@ -60,14 +60,15 @@ public sealed class ModCatalogClient(HttpClient http, string cachePath) : IDispo
     public Task DownloadAsync(ModDownload download, string destination, IProgress<long>? progress,
         CancellationToken token)
     {
-        return AppLog.RunAsync("mod.download", () => DownloadCoreAsync(download, destination, progress, token));
+        return AppLog.RunAsync("mod.download", () => DownloadCoreAsync(download, destination, progress, token),
+            AppLog.Data(("download.expectedBytes", download.Size), ("download.destination", destination)));
     }
 
     private async Task DownloadCoreAsync(ModDownload download, string destination, IProgress<long>? progress,
         CancellationToken token)
     {
         RequireHttps(download.Url);
-        using HttpResponseMessage response = await http.GetAsync(download.Url,
+        using HttpResponseMessage response = await DiagnosticHttp.GetAsync(http, download.Url,
             HttpCompletionOption.ResponseHeadersRead, token);
         _ = response.EnsureSuccessStatusCode();
         if (response.Content.Headers.ContentLength > ModFiles.MaximumDownload)
@@ -78,6 +79,7 @@ public sealed class ModCatalogClient(HttpClient http, string cachePath) : IDispo
         await using Stream input = await response.Content.ReadAsStreamAsync(token);
         await using FileStream output = File.Create(destination);
         long length = await ModFiles.CopyBoundedAsync(input, output, ModFiles.MaximumDownload, token, progress);
+        AppLog.Event("mod.download.bytes", "received", fields: AppLog.Data(("download.actualBytes", length)));
         if (download.Size > 0 && length != download.Size)
         {
             throw new IOException("The downloaded file is incomplete or its size has changed. Refresh the catalog.");
@@ -97,7 +99,7 @@ public sealed class ModCatalogClient(HttpClient http, string cachePath) : IDispo
     private async Task<byte[]> GetBytesCoreAsync(string url, int limit, CancellationToken token)
     {
         RequireHttps(url);
-        using HttpResponseMessage response = await http.GetAsync(url, HttpCompletionOption.ResponseHeadersRead, token);
+        using HttpResponseMessage response = await DiagnosticHttp.GetAsync(http, url, HttpCompletionOption.ResponseHeadersRead, token);
         if (response.StatusCode == HttpStatusCode.TooManyRequests)
         {
             throw new IOException("The catalog is rate limiting requests. Please try again shortly.");
@@ -106,7 +108,8 @@ public sealed class ModCatalogClient(HttpClient http, string cachePath) : IDispo
         _ = response.EnsureSuccessStatusCode();
         await using Stream input = await response.Content.ReadAsStreamAsync(token);
         using var output = new MemoryStream();
-        _ = await ModFiles.CopyBoundedAsync(input, output, limit, token);
+        long received = await ModFiles.CopyBoundedAsync(input, output, limit, token);
+        AppLog.Event("catalog.response.bytes", "received", fields: AppLog.Data(("download.actualBytes", received), ("download.limit", limit)));
         return output.ToArray();
     }
 

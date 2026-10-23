@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using System.Text.RegularExpressions;
 
 namespace DeadLocky.Shared.Api.Diagnostics;
@@ -28,6 +29,24 @@ public sealed partial class LogPrivacy(string home, string user)
         return value.Length <= limit ? value : value[..limit] + " [truncated]";
     }
 
+    public Dictionary<string, string?> Fields(IReadOnlyDictionary<string, string?>? context,
+        IReadOnlyDictionary<string, string?>? fields)
+    {
+        var result = new Dictionary<string, string?>();
+        int remaining = 4096;
+        foreach ((string key, string? value) in (fields ?? new Dictionary<string, string?>())
+                     .Concat(context ?? new Dictionary<string, string?>()).Take(48))
+        {
+            if (result.Count >= 24 || remaining <= 0) { break; }
+            string name = Redact(key, 80);
+            if (result.ContainsKey(name)) { continue; }
+            string text = SensitiveKey().IsMatch(key) ? "[redacted]" : Redact(value, Math.Min(384, remaining));
+            result[name] = text;
+            remaining -= name.Length + text.Length;
+        }
+        return result;
+    }
+
     public SafeLogError Error(Exception exception)
     {
         int nodes = 12;
@@ -49,10 +68,15 @@ public sealed partial class LogPrivacy(string home, string user)
                 .TakeWhile(_ => depth < 5 && nodes > 0 && remaining > 0)
                 .Select(child => Visit(child, depth + 1))];
 
-            return new SafeLogError(item.GetType().FullName ?? "Exception", message, stack, [.. children]);
+            return new SafeLogError(item.GetType().FullName ?? "Exception", message, stack, [.. children], item.HResult,
+                item is Win32Exception native ? native.NativeErrorCode : null,
+                item is HttpRequestException { StatusCode: { } status } ? (int)status : null,
+                item is HttpRequestException transport ? transport.HttpRequestError.ToString() : null);
         }
     }
 
+    [GeneratedRegex("(?i)authorization|cookie|password|passwd|pwd|token|secret|credential|api.?key|email|reply.?to|account|username|query|description|message|payload", RegexOptions.CultureInvariant, 100)]
+    private static partial Regex SensitiveKey();
     [GeneratedRegex(@"(?im)(authorization|proxy-authorization|cookie|set-cookie|password|passwd|pwd|access[_-]?token|refresh[_-]?token|token|api[_-]?key|secret|credentials)[\s""']*[:=][^\r\n]*|(?i)(bearer)\s+[^\s,;]+", RegexOptions.CultureInvariant, 100)]
     private static partial Regex Secret();
     [GeneratedRegex(@"https?://[^\s<>""']+", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant, 100)]

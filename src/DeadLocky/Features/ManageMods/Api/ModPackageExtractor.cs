@@ -70,6 +70,7 @@ internal static partial class ModPackageExtractor
             .. names.Where(static name => !SegmentName().IsMatch(name))
                 .Order(StringComparer.Ordinal)
         ];
+        AppLog.Event("mod.archive.contents", "extracted", fields: AppLog.Data(("archive.entries", count), ("archive.vpkRoots", roots.Length), ("archive.extractedBytes", total)));
         return roots.Length == 0
             ? throw new IOException("No installable VPK files were found in this download.")
             : roots;

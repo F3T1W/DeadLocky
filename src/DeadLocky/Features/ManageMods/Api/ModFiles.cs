@@ -46,6 +46,12 @@ internal static class ModFiles
 
     public static void AtomicWrite(string path, byte[] bytes)
     {
+        _ = AppLog.Run("files.atomic-write", () => { AtomicWriteCore(path, bytes); return true; },
+            AppLog.Data(("file.path", path), ("file.bytes", bytes.Length)));
+    }
+
+    private static void AtomicWriteCore(string path, byte[] bytes)
+    {
         string temporary = path + "." + Guid.NewGuid().ToString("N") + ".tmp";
         try
         {
@@ -56,7 +62,7 @@ internal static class ModFiles
             }
 
             File.Move(temporary, path, true);
-            AppLog.Event("files.atomic-write", "committed");
+            AppLog.Event("files.atomic-write", "committed", fields: AppLog.Data(("file.path", path), ("file.bytes", bytes.Length)));
         }
         finally
         {

@@ -32,7 +32,7 @@ public sealed class SteamClientPreparationService(
 
     public Task<bool> IsDownloadedAsync(GameDirectory directory, CancellationToken cancellationToken)
     {
-        return AppLog.RunAsync("game.installation.verify", () => IsDownloadedCoreAsync(directory, cancellationToken));
+        return AppLog.RunAsync("game.installation.verify", () => IsDownloadedCoreAsync(directory, cancellationToken), AppLog.Data(("game.directory", directory.Path)));
     }
 
     private async Task<bool> IsDownloadedCoreAsync(GameDirectory directory, CancellationToken cancellationToken)
@@ -45,7 +45,9 @@ public sealed class SteamClientPreparationService(
     public Task<SteamAccount?> RestoreSessionAsync(CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        return Task.FromResult(readAccount());
+        SteamAccount? account = readAccount();
+        AppLog.Event("steam.session", account is null ? "sign-in required" : "saved session available");
+        return Task.FromResult(account);
     }
 
     public async Task<SteamAccount> SignInAsync(CancellationToken cancellationToken)
@@ -56,6 +58,7 @@ public sealed class SteamClientPreparationService(
             cancellationToken.ThrowIfCancellationRequested();
             if (readAccount() is { } account)
             {
+                AppLog.Event("steam.session", "sign-in detected");
                 return account;
             }
 

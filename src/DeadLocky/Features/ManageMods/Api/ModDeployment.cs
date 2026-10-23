@@ -29,6 +29,10 @@ internal sealed class ModDeployment(string root, Action<string> ensureGameIdle)
             .. library.ActiveProfile.Mods.Where(static mod => mod.Enabled)
                 .Select(mod => library.Packages.Single(package => package.Id == mod.PackageId))
         ];
+        AppLog.Event("mods.deployment.plan", "prepared", fields: AppLog.Data(("game.directory", game),
+            ("profile.id", library.ActiveProfileId), ("profile.vanilla", library.ActiveProfile.IsVanilla),
+            ("mod.enabledCount", enabled.Length), ("vpk.count", enabled.Sum(static package => package.Files.Length)),
+            ("mod.enabledRemoteIds", string.Join(";", enabled.Take(16).Select(static package => package.RemoteId)))));
         string[] enabledIds = [.. enabled.Select(static package => package.RemoteId)];
         foreach (InstalledMod package in enabled)
         {
@@ -46,7 +50,8 @@ internal sealed class ModDeployment(string root, Action<string> ensureGameIdle)
                 string source = Path.Combine(root, "Packages", package.Id.ToString("N"),
                     ModFiles.SafeRelativePath(file.Name));
                 if (conflicts.Add(package.Name, source, file.Resources) is not { } conflict) { continue; }
-                AppLog.Event("mods.conflict", "different resource contents detected");
+                AppLog.Event("mods.conflict", "different resource contents detected", fields: AppLog.Data(("mod.first", conflict.FirstMod),
+                    ("mod.second", conflict.SecondMod), ("vpk.resource", conflict.Resource)));
                 throw new IOException($"Mod conflict: {conflict.FirstMod} and {conflict.SecondMod} contain "
                                       + $"different content at {conflict.Resource}. Disable one of these mods.");
             }
@@ -61,11 +66,14 @@ internal sealed class ModDeployment(string root, Action<string> ensureGameIdle)
             ? PanoramaImageList.Merge(conflicts.ImageLists.Values, token)
             : null;
 
+        AppLog.Event("mods.image-list", mergedImages is null ? "merge unnecessary" : "merged",
+            fields: AppLog.Data(("panorama.sources", conflicts.ImageLists.Count), ("panorama.mergedBytes", mergedImages?.Length)));
         byte[] original = File.ReadAllBytes(config);
         byte[] patched = Encoding.GetBytes(GameSearchPaths.SetEnabled(
             Encoding.GetString(original), enabled.Length > 0));
         if (enabled.Length == 0 && !Directory.Exists(owned) && original.AsSpan().SequenceEqual(patched))
         {
+            AppLog.Event("mods.deployment", "Vanilla already clean");
             return;
         }
 
@@ -123,9 +131,12 @@ internal sealed class ModDeployment(string root, Action<string> ensureGameIdle)
                         string source = Path.Combine(root, "Packages", package.Id.ToString("N"),
                             ModFiles.SafeRelativePath(name));
                         ModFiles.RequireRegularPath(source);
-                        return !File.Exists(source) || ModFiles.Hash(source) != hash
-                            ? throw new IOException($"The cached files for {package.Name} changed. Reinstall the mod.")
-                            : source;
+                        bool exists = File.Exists(source);
+                        string? actual = exists ? ModFiles.Hash(source) : null;
+                        if (actual == hash) { return source; }
+                        AppLog.Event("mod.cache.integrity", "missing or changed", fields: AppLog.Data(("mod.packageId", package.Id),
+                            ("vpk.file", name), ("file.exists", exists), ("file.expectedHash", hash), ("file.actualHash", actual)));
+                        throw new IOException($"The cached files for {package.Name} changed. Reinstall the mod.");
                     }
                 }
 
@@ -136,6 +147,7 @@ internal sealed class ModDeployment(string root, Action<string> ensureGameIdle)
             var journal = new DeploymentJournal(game, id, original, Directory.Exists(owned));
             ModFiles.WriteJson(JournalPath, journal, ModJsonContext.Default.DeploymentJournal);
             journalWritten = true;
+            AppLog.Event("mods.transaction", "journal written", fields: AppLog.Data(("transaction.id", id)));
             token.ThrowIfCancellationRequested();
             ensureGameIdle(game);
             if (!File.ReadAllBytes(config).AsSpan().SequenceEqual(original))
@@ -161,8 +173,9 @@ internal sealed class ModDeployment(string root, Action<string> ensureGameIdle)
                 ModJsonContext.Default.DeploymentJournal);
             Recover();
         }
-        catch
+        catch (Exception exception)
         {
+            AppLog.Event("mods.rollback", "requested", exception, fields: AppLog.Data(("transaction.id", id), ("transaction.journalWritten", journalWritten)));
             if (journalWritten)
             {
                 Recover();
@@ -193,6 +206,8 @@ internal sealed class ModDeployment(string root, Action<string> ensureGameIdle)
             throw new IOException("Invalid mod recovery transaction.");
         }
 
+        AppLog.Event("mods.recovery", "journal loaded", fields: AppLog.Data(("transaction.id", journal.TransactionId),
+            ("transaction.committed", journal.Committed), ("game.directory", journal.GameDirectory)));
         string citadel = Path.Combine(Path.GetFullPath(journal.GameDirectory), "game", "citadel");
         string config = Path.Combine(citadel, "gameinfo.gi");
         ModFiles.RequireRegularPath(config);
@@ -231,6 +246,7 @@ internal sealed class ModDeployment(string root, Action<string> ensureGameIdle)
         DeleteOwnedDirectory(backup);
         DeleteOwnedDirectory(staging);
         File.Delete(JournalPath);
+        AppLog.Event("mods.recovery", "completed", fields: AppLog.Data(("transaction.id", journal.TransactionId)));
     }
 
     private static void DeleteOwnedDirectory(string path)

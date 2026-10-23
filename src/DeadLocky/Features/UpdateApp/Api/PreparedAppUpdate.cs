@@ -51,9 +51,10 @@ public sealed class PreparedAppUpdate(string transaction, string pending, string
         }
 
         token.ThrowIfCancellationRequested();
-        using Process process = Process.Start(start) ?? throw new IOException("Unable to start the update helper.");
+        using Process process = DiagnosticProcess.Start(start, "update.install-helper");
         // Once started, the helper owns its files. Cancellation must not delete files it is using.
         _handedOff = true;
+        AppLog.Event("update.handoff", "helper owns transaction", fields: AppLog.Data(("update.transaction", Path.GetFileName(transaction))));
         try
         {
             var deadline = Stopwatch.StartNew();

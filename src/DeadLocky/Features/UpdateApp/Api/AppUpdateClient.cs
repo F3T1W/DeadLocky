@@ -15,7 +15,7 @@ public sealed class AppUpdateClient(HttpClient http)
 
     public Task<AppRelease?> FindUpdateAsync(AppVersion installed, CancellationToken token)
     {
-        return AppLog.RunAsync("update.check", () => FindUpdateCoreAsync(installed, token));
+        return AppLog.RunAsync("update.check", () => FindUpdateCoreAsync(installed, token), AppLog.Data(("update.installedVersion", installed.ToString())));
     }
 
     private async Task<AppRelease?> FindUpdateCoreAsync(AppVersion installed, CancellationToken token)
@@ -29,7 +29,7 @@ public sealed class AppUpdateClient(HttpClient http)
             request.Headers.UserAgent.ParseAdd("DeadLocky-Updater/1.0");
             request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/vnd.github+json"));
             request.Headers.Add("X-GitHub-Api-Version", "2022-11-28");
-            using HttpResponseMessage response = await http.SendAsync(request, token);
+            using HttpResponseMessage response = await DiagnosticHttp.SendAsync(http, request, HttpCompletionOption.ResponseContentRead, token);
             if (response.StatusCode is HttpStatusCode.Forbidden or HttpStatusCode.TooManyRequests)
             {
                 throw new IOException("GitHub's update check limit was reached. Try again later.");
@@ -59,6 +59,7 @@ public sealed class AppUpdateClient(HttpClient http)
             throw new IOException("The release has no valid version.");
         }
 
+        AppLog.Event("update.release", "selected", fields: AppLog.Data(("update.targetVersion", next.ToString()), ("update.tag", latest.Tag)));
         string filename = $"DeadLocky-{next}-apple-silicon.dmg";
         ReleaseAsset asset = latest.Assets?.SingleOrDefault(item => item.Name == filename)
                              ?? throw new IOException($"Release {latest.Tag} has no Apple Silicon DMG yet.");
@@ -84,7 +85,9 @@ public sealed class AppUpdateClient(HttpClient http)
         }
 
         Uri checksumUri = AssetUri(checksum.Download, release.Tag, checksum.Name);
-        string content = await http.GetStringAsync(checksumUri, token);
+        using HttpResponseMessage response = await DiagnosticHttp.GetAsync(http, checksumUri.AbsoluteUri, HttpCompletionOption.ResponseContentRead, token);
+        _ = response.EnsureSuccessStatusCode();
+        string content = await response.Content.ReadAsStringAsync(token);
         string[] parts = content.Trim().Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
         return parts.Length == 2 && parts[1] == filename ? "sha256:" + parts[0] : "";
     }
@@ -108,7 +111,8 @@ public sealed class AppUpdateClient(HttpClient http)
     public Task DownloadAsync(AppRelease release, string path, IProgress<double> progress,
         CancellationToken token)
     {
-        return AppLog.RunAsync("update.download", () => DownloadCoreAsync(release, path, progress, token));
+        return AppLog.RunAsync("update.download", () => DownloadCoreAsync(release, path, progress, token),
+            AppLog.Data(("update.targetVersion", release.Version.ToString()), ("download.expectedBytes", release.Size)));
     }
 
     private async Task DownloadCoreAsync(AppRelease release, string path, IProgress<double> progress,
@@ -122,7 +126,7 @@ public sealed class AppUpdateClient(HttpClient http)
             throw new IOException("Invalid update download metadata.");
         }
 
-        using HttpResponseMessage response = await http.GetAsync(release.Download,
+        using HttpResponseMessage response = await DiagnosticHttp.GetAsync(http, release.Download.AbsoluteUri,
             HttpCompletionOption.ResponseHeadersRead, token);
         _ = response.EnsureSuccessStatusCode();
         if (response.Content.Headers.ContentLength is { } length && length != release.Size)
@@ -152,6 +156,7 @@ public sealed class AppUpdateClient(HttpClient http)
                 progress.Report((double)total / release.Size);
             }
 
+            AppLog.Event("update.download.bytes", "received", fields: AppLog.Data(("download.actualBytes", total)));
             if (total != release.Size || !Convert.ToHexString(hash.GetHashAndReset())
                     .Equals(release.Sha256, StringComparison.OrdinalIgnoreCase))
             {

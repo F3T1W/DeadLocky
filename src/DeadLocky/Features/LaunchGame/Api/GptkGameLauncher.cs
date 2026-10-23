@@ -64,7 +64,7 @@ public sealed class GptkGameLauncher : IGameLauncher, IGameExitPreferences, IRun
                     Environment = { ["WINEPREFIX"] = configuration.PrefixDirectory }
                 };
                 stop.ArgumentList.Add("-k");
-                using Process process = Process.Start(stop) ?? throw new IOException("Unable to stop the GPTK prefix.");
+                using Process process = DiagnosticProcess.Start(stop, "wine.stop-prefix");
                 try
                 {
                     await process.WaitForExitAsync(token);
@@ -136,14 +136,15 @@ public sealed class GptkGameLauncher : IGameLauncher, IGameExitPreferences, IRun
             return null;
         }
 
-        bool running = await Task.Run(() => MacGameProcessScanner.IsRunning(configuration, directory),
-            cancellationToken);
-        return running ? CreateSession(configuration, directory) : null;
+        int? pid = await Task.Run(() => MacGameProcessScanner.FindProcessId(configuration, directory), cancellationToken);
+        if (pid is null) { return null; }
+        AppLog.Event("game.process-observation", "attached", fields: AppLog.Data(("process.id", pid), ("game.directory", directory)));
+        return CreateSession(configuration, directory);
     }
 
     public Task<IGameSession> LaunchAsync(string directory, CancellationToken cancellationToken)
     {
-        return AppLog.RunAsync("game.launch", () => LaunchCoreAsync(directory, cancellationToken));
+        return AppLog.RunAsync("game.launch", () => LaunchCoreAsync(directory, cancellationToken), AppLog.Data(("game.directory", directory)));
     }
 
     private async Task<IGameSession> LaunchCoreAsync(string directory, CancellationToken cancellationToken)
@@ -162,6 +163,7 @@ public sealed class GptkGameLauncher : IGameLauncher, IGameExitPreferences, IRun
 
             if (await FindRunningAsync(directory, cancellationToken) is { } existing)
             {
+                AppLog.Event("game.launch.result", "attached to existing game");
                 return existing;
             }
 
@@ -178,8 +180,9 @@ public sealed class GptkGameLauncher : IGameLauncher, IGameExitPreferences, IRun
             while (deadline.Elapsed < TimeSpan.FromMinutes(2))
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                if (await Task.Run(() => MacGameProcessScanner.IsRunning(configuration, directory), cancellationToken))
+                if (await Task.Run(() => MacGameProcessScanner.FindProcessId(configuration, directory), cancellationToken) is { } pid)
                 {
+                    AppLog.Event("game.launch.result", "game process detected", fields: AppLog.Data(("game.startupMs", deadline.Elapsed.TotalMilliseconds), ("process.id", pid)));
                     return CreateSession(configuration, directory);
                 }
 
@@ -191,6 +194,7 @@ public sealed class GptkGameLauncher : IGameLauncher, IGameExitPreferences, IRun
                 await Task.Delay(TimeSpan.FromMilliseconds(500), cancellationToken);
             }
 
+            AppLog.Event("game.launch.result", "process detection timed out", fields: AppLog.Data(("steam.commandCompleted", command.IsCompleted), ("game.startupMs", deadline.Elapsed.TotalMilliseconds)));
             throw new IOException("Windows Steam did not start Deadlock. Finish signing in there, "
                                   + "let Steam recognize the linked game files, then retry Play.");
         }
@@ -226,12 +230,12 @@ public sealed class GptkGameLauncher : IGameLauncher, IGameExitPreferences, IRun
         return Configuration is not null
                && SteamClientState.IsInstalled(
                    Path.GetDirectoryName(GptkConfigurationStore.SteamExecutable(Configuration))!,
-                   directory);
+                   directory, true);
     }
 
     public Task DownloadWithSteamAsync(string directory, CancellationToken token)
     {
-        return AppLog.RunAsync("game.download", () => DownloadWithSteamCoreAsync(directory, token));
+        return AppLog.RunAsync("game.download", () => DownloadWithSteamCoreAsync(directory, token), AppLog.Data(("game.directory", directory)));
     }
 
     private async Task DownloadWithSteamCoreAsync(string directory, CancellationToken token)
@@ -249,7 +253,7 @@ public sealed class GptkGameLauncher : IGameLauncher, IGameExitPreferences, IRun
         ProcessStartInfo start = CreateStartInfo(configuration, false);
         start.ArgumentList.Add("steam://install/1422450");
         token.ThrowIfCancellationRequested();
-        Process process = StartProcess(start, token) ?? throw new IOException("Unable to open Steam installation.");
+        Process process = StartProcess(start, token);
         process.OutputDataReceived += static (_, _) => { };
         process.ErrorDataReceived += static (_, _) => { };
         process.BeginOutputReadLine();
@@ -275,14 +279,14 @@ public sealed class GptkGameLauncher : IGameLauncher, IGameExitPreferences, IRun
         GameLaunchConfiguration configuration = ValidConfiguration();
         if (MacGameProcessScanner.IsRunning(configuration, directory))
         {
+            AppLog.Event("game.files-idle", "blocked: game is running", fields: AppLog.Data(("game.directory", directory)));
             throw new IOException("Close Deadlock before applying a mod profile.");
         }
 
         string steam = Path.GetDirectoryName(GptkConfigurationStore.SteamExecutable(configuration))!;
-        if (!SteamClientState.IsInstalled(steam, directory))
-        {
-            throw new IOException("Wait for Steam to finish installing or updating Deadlock before applying mods.");
-        }
+        if (SteamClientState.IsInstalled(steam, directory)) { return; }
+        AppLog.Event("game.files-idle", "blocked: Steam installation is not ready", fields: AppLog.Data(("game.directory", directory)));
+        throw new IOException("Wait for Steam to finish installing or updating Deadlock before applying mods.");
     }
 
     private GameLaunchConfiguration ValidConfiguration()
@@ -291,6 +295,8 @@ public sealed class GptkGameLauncher : IGameLauncher, IGameExitPreferences, IRun
                                                 ?? throw new IOException(
                                                     "Set up GPTK and a Windows Steam prefix before playing.");
         GptkConfigurationStore.Validate(configuration);
+        AppLog.Event("runtime.launch-configuration", "validated", fields: AppLog.Data(("wine.executable", configuration.WineExecutable),
+            ("wine.prefix", configuration.PrefixDirectory), ("steam.executable", GptkConfigurationStore.SteamExecutable(configuration))));
         return configuration;
     }
 
@@ -315,8 +321,7 @@ public sealed class GptkGameLauncher : IGameLauncher, IGameExitPreferences, IRun
             start.ArgumentList.Add(argument);
         }
 
-        using Process process = StartProcess(start, token)
-                                ?? throw new IOException("Unable to configure Wine crash handling.");
+        using Process process = StartProcess(start, token);
         Task output = process.StandardOutput.ReadToEndAsync(token);
         Task error = process.StandardError.ReadToEndAsync(token);
         await process.WaitForExitAsync(token);
@@ -338,8 +343,7 @@ public sealed class GptkGameLauncher : IGameLauncher, IGameExitPreferences, IRun
 
         ProcessStartInfo shutdown = CreateStartInfo(configuration, false);
         shutdown.ArgumentList.Add("-shutdown");
-        using (Process process = StartProcess(shutdown, token)
-                                 ?? throw new IOException("Unable to close Windows Steam."))
+        using (Process process = StartProcess(shutdown, token))
         {
             Task output = process.StandardOutput.ReadToEndAsync(token);
             Task error = process.StandardError.ReadToEndAsync(token);
@@ -367,7 +371,7 @@ public sealed class GptkGameLauncher : IGameLauncher, IGameExitPreferences, IRun
         };
         stop.ArgumentList.Add("-k");
         token.ThrowIfCancellationRequested();
-        using Process cleanup = Process.Start(stop) ?? throw new IOException("Unable to stop the GPTK prefix.");
+        using Process cleanup = DiagnosticProcess.Start(stop, "wine.stop-prefix");
         await cleanup.WaitForExitAsync(token);
         if (cleanup.ExitCode != 0)
         {
@@ -383,7 +387,7 @@ public sealed class GptkGameLauncher : IGameLauncher, IGameExitPreferences, IRun
     private Task<int> StartSteam(GameLaunchConfiguration configuration, bool launchGame, CancellationToken token)
     {
         ProcessStartInfo start = CreateStartInfo(configuration, launchGame);
-        Process process = StartProcess(start, token) ?? throw new IOException("Unable to start GPTK.");
+        Process process = StartProcess(start, token);
         process.OutputDataReceived += static (_, _) => { };
         process.ErrorDataReceived += static (_, _) => { };
         process.BeginOutputReadLine();
@@ -391,14 +395,14 @@ public sealed class GptkGameLauncher : IGameLauncher, IGameExitPreferences, IRun
         return WaitForCommandAsync(process);
     }
 
-    private Process? StartProcess(ProcessStartInfo start, CancellationToken token)
+    private Process StartProcess(ProcessStartInfo start, CancellationToken token)
     {
         lock (_processStart)
         {
             token.ThrowIfCancellationRequested();
             return _emergencyStopRequested
                 ? throw new OperationCanceledException("Emergency shutdown has been requested.")
-                : Process.Start(start);
+                : DiagnosticProcess.Start(start, "wine.command");
         }
     }
 

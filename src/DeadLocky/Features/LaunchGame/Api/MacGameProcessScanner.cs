@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Text;
 using DeadLocky.Features.LaunchGame.Model;
+using DeadLocky.Shared.Api.Diagnostics;
 
 namespace DeadLocky.Features.LaunchGame.Api;
 
@@ -29,6 +30,7 @@ internal static partial class MacGameProcessScanner
                         continue;
                     }
 
+                    AppLog.Event("process.prefix-stop", "terminating owned prefix process", fields: AppLog.Data(("process.id", process.Id)));
                     process.Kill();
                     await process.WaitForExitAsync(token);
                 }
@@ -47,6 +49,11 @@ internal static partial class MacGameProcessScanner
     }
 
     public static bool IsRunning(GameLaunchConfiguration configuration, string directory)
+    {
+        return FindProcessId(configuration, directory) is not null;
+    }
+
+    public static int? FindProcessId(GameLaunchConfiguration configuration, string directory)
     {
         string expected = CanonicalPath(Path.Combine(directory, "game", "bin", "win64", "deadlock.exe"));
         string prefix = CanonicalPath(configuration.PrefixDirectory);
@@ -74,7 +81,7 @@ internal static partial class MacGameProcessScanner
                     if (arguments.Select(argument => MapGameArgument(argument, configuration.PrefixDirectory))
                         .Any(path => path is not null && CanonicalPath(path) == expected))
                     {
-                        return true;
+                        return process.Id;
                     }
                 }
                 catch (Exception exception) when (exception is InvalidOperationException
@@ -84,7 +91,7 @@ internal static partial class MacGameProcessScanner
             }
         }
 
-        return false;
+        return null;
     }
 
     private static string? MapGameArgument(string argument, string prefix)

@@ -17,7 +17,7 @@ public sealed class MacUpdateInstaller(string application, string stateDirectory
     public Task<PreparedAppUpdate> PrepareAsync(AppUpdateClient client, AppRelease release,
         IProgress<double> progress, CancellationToken token)
     {
-        return AppLog.RunAsync("update.prepare", () => PrepareCoreAsync(client, release, progress, token));
+        return AppLog.RunAsync("update.prepare", () => PrepareCoreAsync(client, release, progress, token), AppLog.Data(("update.targetVersion", release.Version.ToString()), ("update.appPath", _application)));
     }
 
     private async Task<PreparedAppUpdate> PrepareCoreAsync(AppUpdateClient client, AppRelease release,
@@ -63,6 +63,7 @@ public sealed class MacUpdateInstaller(string application, string stateDirectory
             _ = await UpdateProcess.RunAsync("/usr/bin/hdiutil", token, "detach", mount);
             mounted = false;
             await ValidateBundleAsync(staged, release.Version, token);
+            AppLog.Event("update.bundle", "version, architecture and signature verified");
             string script = Path.Combine(transaction, "InstallUpdate.sh");
             await using (Stream resource = typeof(MacUpdateInstaller).Assembly.GetManifestResourceStream(
                              "DeadLocky.InstallUpdate.sh") ?? throw new IOException("The update helper is missing."))
@@ -191,6 +192,7 @@ public sealed class MacUpdateInstaller(string application, string stateDirectory
 
     public async Task ConfirmLaunchAsync(AppVersion version)
     {
+        await ReadHelperOutcomeAsync();
         string pending = Path.Combine(_state, "pending.json");
         if (!File.Exists(pending))
         {
@@ -206,15 +208,36 @@ public sealed class MacUpdateInstaller(string application, string stateDirectory
                 || !ValidTransaction(receipt.Transaction, _application)
                 || !File.Exists(Path.Combine(receipt.Transaction, "installed")))
             {
+                AppLog.Event("update.confirm", "pending transaction does not match this launch");
                 return;
             }
 
             await File.WriteAllTextAsync(Path.Combine(receipt.Transaction, "confirmed"), "ready");
+            AppLog.Event("update.confirm", "new application launch confirmed", fields: AppLog.Data(("update.version", version.ToString())));
         }
         catch (Exception exception) when (exception is IOException or JsonException or UnauthorizedAccessException)
         {
             AppLog.Event("update.confirm", "failed", exception);
             // A failed cleanup must not prevent the installed app from opening.
+        }
+    }
+
+    private async Task ReadHelperOutcomeAsync()
+    {
+        string path = Path.Combine(_state, "last-outcome.json");
+        if (!File.Exists(path)) { return; }
+        try
+        {
+            await using FileStream file = DiagnosticFiles.OpenRead(path);
+            if (file.Length > 4096) { throw new IOException("The update outcome exceeds its size limit."); }
+            UpdateOutcome? outcome = await JsonSerializer.DeserializeAsync(file, UpdateJsonContext.Default.UpdateOutcome);
+            if (outcome is null) { return; }
+            AppLog.Event("update.previous-helper", outcome.Stage, fields: AppLog.Data(("update.exitCode", outcome.Code),
+                ("update.transaction", outcome.Transaction), ("update.observedAt", outcome.Timestamp)));
+        }
+        catch (Exception exception) when (exception is IOException or JsonException or UnauthorizedAccessException)
+        {
+            AppLog.Event("update.previous-helper", "outcome unavailable", exception);
         }
     }
 

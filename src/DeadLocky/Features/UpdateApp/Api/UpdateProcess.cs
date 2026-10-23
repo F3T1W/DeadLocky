@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using DeadLocky.Shared.Api.Diagnostics;
 
 namespace DeadLocky.Features.UpdateApp.Api;
 
@@ -17,14 +18,15 @@ internal static class UpdateProcess
             start.ArgumentList.Add(argument);
         }
 
-        using Process process = Process.Start(start) ?? throw new IOException($"Unable to start {executable}.");
-        Task<string> output = process.StandardOutput.ReadToEndAsync(token);
-        Task<string> error = process.StandardError.ReadToEndAsync(token);
+        using Process process = DiagnosticProcess.Start(start, "update.tool");
+        Task<string> output = DiagnosticProcess.ReadBoundedAsync(process.StandardOutput, 1024 * 1024, token);
+        Task<string> error = DiagnosticProcess.ReadBoundedAsync(process.StandardError, 65536, token);
         try
         {
             await process.WaitForExitAsync(token);
             string text = await output;
             string diagnostic = await error;
+            DiagnosticProcess.Stderr(diagnostic);
             return process.ExitCode == 0 ? text + diagnostic
                 : throw new IOException($"{Path.GetFileName(executable)} failed: {diagnostic.Trim()}");
         }

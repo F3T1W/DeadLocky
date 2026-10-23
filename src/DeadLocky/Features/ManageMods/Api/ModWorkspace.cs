@@ -128,7 +128,7 @@ public sealed class ModWorkspace : IAsyncDisposable
     public Task<PreparedMod> PrepareAsync(ModCatalogClient catalog, ModDownload download,
         IProgress<long>? progress, CancellationToken token)
     {
-        return AppLog.RunAsync("mod.prepare", () => PrepareCoreAsync(catalog, download, progress, token));
+        return AppLog.RunAsync("mod.prepare", () => PrepareCoreAsync(catalog, download, progress, token), AppLog.Data(("download.expectedBytes", download.Size), ("download.name", download.Name)));
     }
 
     private async Task<PreparedMod> PrepareCoreAsync(ModCatalogClient catalog, ModDownload download,
@@ -201,7 +201,8 @@ public sealed class ModWorkspace : IAsyncDisposable
                                           + "Choose only one variant.");
                 }
 
-                AppLog.Event("mod.vpk.verify", "validated");
+                AppLog.Event("mod.vpk.verify", "validated", fields: AppLog.Data(("vpk.file", name),
+                    ("vpk.resources", contents.Resources.Length), ("vpk.parts", contents.Parts.Length)));
                 files.Add(new ModPackageFile(name, ModFiles.Hash(source), contents.Resources,
                     contents.Parts.ToDictionary(part => ModFiles.SafeRelativePath(Path.GetRelativePath(expected, part)),
                         ModFiles.Hash, StringComparer.OrdinalIgnoreCase)));
@@ -239,7 +240,8 @@ public sealed class ModWorkspace : IAsyncDisposable
                 Directory.Move(destination, expected);
                 throw;
             }
-        }, token);
+        }, token, fields: AppLog.Data(("profile.id", profileId), ("mod.remoteId", mod.RemoteId), ("mod.packageId", prepared.Id), ("download.name", download.Name),
+            ("vpk.selected", string.Join(";", selected.Take(16)))));
     }
 
     public Task ApplyAsync(string directory, CancellationToken token)
@@ -250,7 +252,7 @@ public sealed class ModWorkspace : IAsyncDisposable
             var deployment = new ModDeployment(_root, _ensureGameIdle);
             deployment.Recover();
             deployment.Apply(directory, Read(), token);
-        }, token), token);
+        }, token), token, fields: AppLog.Data(("game.directory", directory)));
     }
 
     private Task ChangeProfileAsync(Guid id, Func<ModProfile, ModProfile> change, CancellationToken token, [CallerMemberName] string stage = "")
@@ -258,6 +260,7 @@ public sealed class ModWorkspace : IAsyncDisposable
         return ChangeAsync(library =>
         {
             ModProfile updated = change(RequireEditable(library, id));
+            AppLog.Event("profile.change", stage, fields: AppLog.Data(("profile.id", id)));
             return library with
             {
                 Profiles = [.. library.Profiles.Select(profile => profile.Id == id ? updated : profile)]
@@ -277,11 +280,16 @@ public sealed class ModWorkspace : IAsyncDisposable
     private void Save(ModLibrary library)
     {
         ModFiles.WriteJson(Path.Combine(_root, "library.json"), library, ModJsonContext.Default.ModLibrary);
+        AppLog.Event("mods.library.saved", "committed", fields: AppLog.Data(("profile.activeId", library.ActiveProfileId),
+            ("profile.count", library.Profiles.Length), ("mod.packages", library.Packages.Length),
+            ("profile.enabledPackages", string.Join(";", library.ActiveProfile.Mods.Where(static item => item.Enabled)
+                .Take(16).Select(static item => item.PackageId)))));
     }
 
-    private Task WithLockAsync(Func<Task> action, CancellationToken token, [CallerMemberName] string stage = "")
+    private Task WithLockAsync(Func<Task> action, CancellationToken token, [CallerMemberName] string stage = "",
+        IReadOnlyDictionary<string, string?>? fields = null)
     {
-        return AppLog.RunAsync("mods." + stage, () => WithLockCoreAsync(action, token));
+        return AppLog.RunAsync("mods." + stage, () => WithLockCoreAsync(action, token), fields);
     }
 
     private async Task WithLockCoreAsync(Func<Task> action, CancellationToken token)
