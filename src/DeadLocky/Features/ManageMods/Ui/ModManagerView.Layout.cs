@@ -33,6 +33,7 @@ public sealed partial class ModManagerView
                      _create,
                      _rename,
                      _profileSummary,
+                     _repairCamera,
                      library
                  }
                 )
@@ -79,7 +80,10 @@ public sealed partial class ModManagerView
             _profileSummary.LeadingAnchor.ConstraintEqualTo(sidebar.LeadingAnchor),
             _profileSummary.TrailingAnchor.ConstraintEqualTo(sidebar.TrailingAnchor),
             _profileSummary.HeightAnchor.ConstraintEqualTo(36),
-            library.TopAnchor.ConstraintEqualTo(_profileSummary.BottomAnchor, 14),
+            _repairCamera.TopAnchor.ConstraintEqualTo(_profileSummary.BottomAnchor, 8),
+            _repairCamera.LeadingAnchor.ConstraintEqualTo(sidebar.LeadingAnchor),
+            _repairCamera.TrailingAnchor.ConstraintEqualTo(sidebar.TrailingAnchor),
+            library.TopAnchor.ConstraintEqualTo(_repairCamera.BottomAnchor, 12),
             library.LeadingAnchor.ConstraintEqualTo(sidebar.LeadingAnchor),
             library.TrailingAnchor.ConstraintEqualTo(sidebar.TrailingAnchor),
             library.BottomAnchor.ConstraintEqualTo(sidebar.BottomAnchor),

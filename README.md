@@ -90,6 +90,17 @@ external resource references. Only staged VPK copies are repacked; cached downlo
 Other different game content at the same path is reported as a conflict; disable one conflicting mod before Play.
 A profile currently supports up to 99 enabled VPK indexes.
 
+**Repair camera…** is an experimental, offline repair for older hero skins. After the risk notice
+(which can be hidden on future uses), select one or more installed mods in the current profile.
+DeadLocky recognizes outdated camera pivots or missing camera definitions, copies camera data from
+the matching installed game model, and verifies the repacked resources before connecting a repaired
+copy to the profiles that share that package. Geometry, skeletons and unrelated resources are preserved.
+Original packages remain in the cache; select repaired mods and choose **Restore originals** to undo.
+Both repair and restore apply on the next **Play**. Signed/multipart VPKs and incompatible rigs are
+left unchanged with individual results. Test movement, aiming and crouching in Hideout afterwards;
+file verification cannot guarantee correct in-game behavior. Reinstalling an author's download can
+replace a repair. No AI service, external editor or tool download is needed.
+
 Mods are staged under `~/Library/Application Support/DeadLocky/Mods` and deployed only to
 `game/citadel/DeadLockyAddons`. The launcher adds its own search path to the current `gameinfo.gi`, keeping the base
 game's `Mod` and `Write` paths so default keybindings and settings remain available.

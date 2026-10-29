@@ -307,6 +307,64 @@ public sealed class ModManagerTests : IDisposable
     }
 
     [Theory]
+    [InlineData(0x7FFF)]
+    [InlineData(0)]
+    public void EmptyEntriesDoNotRequirePayloadOffsetsOrChunkFiles(ushort archive)
+    {
+        _ = Directory.CreateDirectory(_root);
+        string path = Path.Combine(_root, "skin.vpk");
+        File.WriteAllBytes(path, VpkEntries(("README.txt", archive, 0)));
+        var contents = VpkReader.Read(path);
+        Assert.Empty(contents.Parts);
+        var entry = contents.Entries["README.txt"];
+        Assert.Equal(0u, entry.Length);
+        Assert.InRange(entry.Offset, 0, new FileInfo(path).Length);
+        Assert.Equal("RAW:" + Convert.ToHexString(System.Security.Cryptography.SHA256.HashData([])),
+            VpkResourceHash.Create("README.txt", entry, CancellationToken.None));
+    }
+
+    [Theory]
+    [InlineData(0x7FFF)]
+    [InlineData(0)]
+    public void PreloadOnlyEntriesCanBeReadAndRepackedWithoutExternalData(ushort archive)
+    {
+        _ = Directory.CreateDirectory(_root);
+        string path = Path.Combine(_root, "skin.vpk");
+        byte[] preload = [1, 2, 3];
+        using var tree = new MemoryStream();
+        using (var writer = new BinaryWriter(tree, Encoding.UTF8, true))
+        {
+            writer.Write("vmat_c\0materials\0skin\0"u8);
+            writer.Write(System.IO.Hashing.Crc32.HashToUInt32(preload));
+            writer.Write((ushort)preload.Length);
+            writer.Write(archive);
+            writer.Write(uint.MaxValue);
+            writer.Write(0u);
+            writer.Write(ushort.MaxValue);
+            writer.Write(preload);
+            writer.Write(new byte[3]);
+        }
+
+        using (var output = File.Create(path))
+        using (var writer = new BinaryWriter(output))
+        {
+            writer.Write(0x55AA1234u);
+            writer.Write(1u);
+            writer.Write((uint)tree.Length);
+            writer.Write(tree.ToArray());
+        }
+
+        var contents = VpkReader.Read(path);
+        Assert.Empty(contents.Parts);
+        Assert.Equal(preload, contents.Entries["materials/skin.vmat_c"].Preload);
+        string repacked = Path.Combine(_root, "repacked.vpk");
+        VpkWriter.Replace(path, repacked, new Dictionary<string, byte[]>(), CancellationToken.None);
+        var copied = VpkReader.Read(repacked);
+        Assert.Equal(VpkResourceHash.Create("raw", contents.Entries["materials/skin.vmat_c"], CancellationToken.None),
+            VpkResourceHash.Create("raw", copied.Entries["materials/skin.vmat_c"], CancellationToken.None));
+    }
+
+    [Theory]
     [InlineData("README.txt")]
     [InlineData("readme.TXT")]
     public void RepeatedRootDocumentationDoesNotInvalidateVpk(string repeated)
@@ -482,7 +540,7 @@ public sealed class ModManagerTests : IDisposable
                         writer.Write(0u);
                         writer.Write((ushort)0);
                         writer.Write(archive);
-                        writer.Write(0u);
+                        writer.Write(length == 0 ? uint.MaxValue : 0u);
                         writer.Write(length);
                         writer.Write(ushort.MaxValue);
                     }

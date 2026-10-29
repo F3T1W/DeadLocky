@@ -96,7 +96,7 @@ public sealed class LauncherWindowController : NSWindowController
         }
 
         NSView content = Window.ContentView!;
-        _mods = new ModManagerView(Window, workspace, catalog) { Hidden = true };
+        _mods = new ModManagerView(Window, workspace, catalog, () => _selection.DirectoryPath) { Hidden = true };
         content.AddSubview(_mods);
         content.AddSubview(_launcherTab);
         content.AddSubview(_modsTab);

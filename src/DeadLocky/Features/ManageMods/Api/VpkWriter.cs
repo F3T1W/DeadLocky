@@ -8,10 +8,25 @@ internal static class VpkWriter
     public static void Replace(string source, string destination, string resource, byte[] replacement,
         CancellationToken token)
     {
+        Replace(source, destination, new Dictionary<string, byte[]>(StringComparer.OrdinalIgnoreCase)
+        {
+            [resource] = replacement
+        }, token);
+    }
+
+    public static void Replace(string source, string destination, IReadOnlyDictionary<string, byte[]> replacements,
+        CancellationToken token)
+    {
         VpkContents contents = VpkReader.Read(source);
+        if (Path.GetFullPath(source) == Path.GetFullPath(destination)
+            || replacements.Keys.Any(path => !contents.Entries.ContainsKey(path)))
+        {
+            throw new IOException("Invalid VPK replacement destination or resource.");
+        }
+
         using var tree = new MemoryStream();
         using var directory = new BinaryWriter(tree, Encoding.UTF8, true);
-        List<(VpkEntry Entry, bool Replaced)> payloads = [];
+        List<(VpkEntry Entry, byte[]? Replacement)> payloads = [];
         long offset = 0;
         foreach (IGrouping<string, KeyValuePair<string, VpkEntry>> extension in contents.Entries
                      .GroupBy(static pair => Path.GetExtension(pair.Key)))
@@ -24,8 +39,8 @@ internal static class VpkWriter
                 foreach ((string path, VpkEntry entry) in folder)
                 {
                     token.ThrowIfCancellationRequested();
-                    bool replaced = path.Equals(resource, StringComparison.OrdinalIgnoreCase);
-                    uint length = replaced ? (uint)replacement.Length : entry.Length;
+                    bool replaced = replacements.TryGetValue(path, out byte[]? replacement);
+                    uint length = replaced ? (uint)replacement!.Length : entry.Length;
                     byte[] preload = replaced ? [] : entry.Preload;
                     if (offset + length > uint.MaxValue)
                     {
@@ -33,7 +48,7 @@ internal static class VpkWriter
                     }
 
                     WriteString(Path.GetFileNameWithoutExtension(path));
-                    directory.Write(replaced ? Crc32.HashToUInt32(replacement) : entry.Crc32);
+                    directory.Write(replaced ? Crc32.HashToUInt32(replacement!) : entry.Crc32);
                     directory.Write((ushort)preload.Length);
                     directory.Write((ushort)0x7FFF);
                     directory.Write((uint)offset);
@@ -41,7 +56,7 @@ internal static class VpkWriter
                     directory.Write(ushort.MaxValue);
                     directory.Write(preload);
                     offset += length;
-                    payloads.Add((entry, replaced));
+                    payloads.Add((entry, replacement));
                 }
 
                 directory.Write((byte)0);
@@ -59,10 +74,10 @@ internal static class VpkWriter
         tree.Position = 0;
         tree.CopyTo(output);
         byte[] buffer = new byte[81920];
-        foreach ((VpkEntry entry, bool replaced) in payloads)
+        foreach ((VpkEntry entry, byte[]? replacement) in payloads)
         {
             token.ThrowIfCancellationRequested();
-            if (replaced)
+            if (replacement is not null)
             {
                 output.Write(replacement);
                 continue;

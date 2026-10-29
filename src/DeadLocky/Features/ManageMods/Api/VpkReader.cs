@@ -63,7 +63,13 @@ internal static class VpkReader
 
                     string data = path;
                     long dataOffset = end;
-                    if (archive != 0x7FFF)
+                    // Empty/preload-only entries have no payload location. VPK writers may use
+                    // uint.MaxValue for the unused offset and need not ship an external chunk.
+                    if (length == 0)
+                    {
+                        offset = 0;
+                    }
+                    else if (archive != 0x7FFF)
                     {
                         if (!path.EndsWith("_dir.vpk", StringComparison.OrdinalIgnoreCase))
                         {

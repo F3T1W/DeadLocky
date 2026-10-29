@@ -18,6 +18,7 @@ public sealed record InstalledMod(
     ModPackageFile[] Files)
 {
     public string[]? RequiredModIds { get; init; }
+    public Guid? CameraRepairOriginalPackageId { get; init; }
 }
 
 public sealed record ModPackageFile(string Name, string Sha256, string[] Resources, Dictionary<string, string> Parts);

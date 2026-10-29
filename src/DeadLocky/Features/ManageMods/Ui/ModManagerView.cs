@@ -39,6 +39,8 @@ public sealed partial class ModManagerView : NSView
     private readonly NSPopUpButton _profiles = Popup();
     private readonly NSButton _refresh = LauncherStyle.Button("Refresh");
     private readonly NSButton _rename = LauncherStyle.Button("Rename");
+    private readonly NSButton _repairCamera = LauncherStyle.Button("Repair camera…");
+    private readonly Func<string?> _gameDirectory;
 
     private readonly NSSearchField _search = new()
     {
@@ -60,16 +62,19 @@ public sealed partial class ModManagerView : NSView
     private bool _refreshing;
     private CancellationTokenSource? _searchDelay;
 
-    public ModManagerView(NSWindow owner, ModWorkspace workspace, ModCatalogClient catalog)
+    public ModManagerView(NSWindow owner, ModWorkspace workspace, ModCatalogClient catalog,
+        Func<string?> gameDirectory)
     {
         _owner = owner;
         _workspace = workspace;
         _catalog = catalog;
+        _gameDirectory = gameDirectory;
         TranslatesAutoresizingMaskIntoConstraints = false;
         BuildLayout();
         _profiles.Activated += OnProfileSelected;
         _create.Activated += OnCreate;
         _rename.Activated += OnRename;
+        _repairCamera.Activated += OnRepairCamera;
         _refresh.Activated += OnRefresh;
         _search.Changed += OnSearch;
         _categories.Activated += OnFilter;
@@ -134,7 +139,10 @@ public sealed partial class ModManagerView : NSView
             _status.StringValue = "Working…";
             await AppLog.RunAsync("mods.ui." + operation, () => action(_lifetime.Token),
                 AppLog.Data(("profile.id", _library.ActiveProfileId)));
-            _status.StringValue = success;
+            if (success.Length > 0)
+            {
+                _status.StringValue = success;
+            }
         }
         catch (OperationCanceledException)
         {
@@ -214,6 +222,7 @@ public sealed partial class ModManagerView : NSView
         _profiles.Enabled = editable;
         _create.Enabled = editable;
         _rename.Enabled = editable && !profile.IsVanilla;
+        _repairCamera.Enabled = editable && profile.Mods.Length > 0;
         _profileSummary.StringValue = _gameBusy ? "Close Deadlock to edit profiles." :
             profile.IsVanilla ? "Always available. No DeadLocky mods." :
             $"{profile.Mods.Count(static mod => mod.Enabled)} of {profile.Mods.Length} enabled · Applies on Play";

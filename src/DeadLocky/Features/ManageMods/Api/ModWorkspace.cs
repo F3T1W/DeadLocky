@@ -6,7 +6,7 @@ using DeadLocky.Shared.Api.Diagnostics;
 
 namespace DeadLocky.Features.ManageMods.Api;
 
-public sealed class ModWorkspace : IAsyncDisposable
+public sealed partial class ModWorkspace : IAsyncDisposable
 {
     private readonly Action<string> _ensureGameIdle;
     private readonly SemaphoreSlim _gate = new(1, 1);
