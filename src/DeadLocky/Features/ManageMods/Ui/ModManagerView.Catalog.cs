@@ -169,7 +169,8 @@ public sealed partial class ModManagerView
         install.Activated += (_, _) => _ = OperateAsync(tokenValue => InstallAsync(mod, profile.Id, tokenValue),
             $"{mod.Name} installed in {profile.Name}.");
         NSButton details = LauncherStyle.Button("Details");
-        details.Activated += (_, _) => ShowDetails(mod);
+        details.Enabled = !IsBusy;
+        details.Activated += (_, _) => _ = UiAction.RunAsync(_owner, () => ShowDetailsAsync(mod));
         foreach (NSView view in new NSView[]
                  {
                      image,
@@ -252,8 +253,13 @@ public sealed partial class ModManagerView
         }
     }
 
-    private void ShowDetails(CatalogMod mod)
+    private async Task ShowDetailsAsync(CatalogMod mod)
     {
+        if (IsBusy || _disposed)
+        {
+            return;
+        }
+
         string description = WebUtility.HtmlDecode(HtmlTags().Replace(mod.Description ?? "", " "));
         using var alert = new NSAlert();
         alert.MessageText = mod.Name;
@@ -261,7 +267,10 @@ public sealed partial class ModManagerView
             $"By {mod.Author} · {mod.Category}\n\n" + description[..Math.Min(description.Length, 3000)];
         LauncherStyle.ApplyButtonStyle(alert.AddButton("Close"));
         LauncherStyle.ApplyButtonStyle(alert.AddButton("Open GameBanana page"));
-        if (alert.RunSheetModal(_owner) == 1001 && Uri.TryCreate(mod.RemoteUrl, UriKind.Absolute, out Uri? uri) &&
+        AppLog.Event("catalog.details", "opened", fields: AppLog.Data(("mod.remoteId", mod.RemoteId)));
+        nint response = (nint)await alert.BeginSheetAsync(_owner);
+        AppLog.Event("catalog.details", "closed", fields: AppLog.Data(("mod.remoteId", mod.RemoteId), ("dialog.response", response)));
+        if (response == 1001 && Uri.TryCreate(mod.RemoteUrl, UriKind.Absolute, out Uri? uri) &&
             uri.Scheme == Uri.UriSchemeHttps)
         {
             _ = NSWorkspace.SharedWorkspace.OpenUrl(new NSUrl(uri.AbsoluteUri));
@@ -277,7 +286,7 @@ public sealed partial class ModManagerView
             throw new IOException("The author has not provided a downloadable file.");
         }
 
-        ModDownload download = ChooseDownload(downloads) ??
+        ModDownload download = await ChooseDownloadAsync(downloads) ??
                                throw new OperationCanceledException("Installation cancelled.", token);
         var progress = new Progress<long>(bytes =>
         {
@@ -291,7 +300,7 @@ public sealed partial class ModManagerView
         try
         {
             _status.StringValue = "Choose VPK files for this mod…";
-            string[] selected = ChooseVpks(prepared.Roots);
+            string[] selected = await ChooseVpksAsync(prepared.Roots);
             if (selected.Length == 0)
             {
                 throw new OperationCanceledException("Installation cancelled.", token);
@@ -305,7 +314,7 @@ public sealed partial class ModManagerView
         }
     }
 
-    private ModDownload? ChooseDownload(ModDownload[] downloads)
+    private async Task<ModDownload?> ChooseDownloadAsync(ModDownload[] downloads)
     {
         using var popup = new NSPopUpButton(new CGRect(0, 0, 420, 32), false);
         LauncherStyle.ApplyButtonStyle(popup);
@@ -316,10 +325,10 @@ public sealed partial class ModManagerView
         alert.InformativeText = "Select the author's file or variant you want to install.";
         LauncherStyle.ApplyButtonStyle(alert.AddButton("Download"));
         LauncherStyle.ApplyButtonStyle(alert.AddButton("Cancel"));
-        return alert.RunSheetModal(_owner) == 1000 ? downloads[(int)popup.IndexOfSelectedItem] : null;
+        return (nint)await alert.BeginSheetAsync(_owner) == 1000 ? downloads[(int)popup.IndexOfSelectedItem] : null;
     }
 
-    private string[] ChooseVpks(string[] roots)
+    private async Task<string[]> ChooseVpksAsync(string[] roots)
     {
         if (roots.Length == 1)
         {
@@ -354,7 +363,7 @@ public sealed partial class ModManagerView
                                 " Referenced multipart data files are included automatically.";
         LauncherStyle.ApplyButtonStyle(alert.AddButton("Install selected"));
         LauncherStyle.ApplyButtonStyle(alert.AddButton("Cancel"));
-        return alert.RunSheetModal(_owner) == 1000
+        return (nint)await alert.BeginSheetAsync(_owner) == 1000
             ? [.. roots.Where((_, index) => buttons[index].State == NSCellStateValue.On)]
             : [];
     }

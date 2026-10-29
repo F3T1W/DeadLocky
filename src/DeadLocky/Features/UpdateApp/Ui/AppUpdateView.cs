@@ -9,18 +9,21 @@ public sealed class AppUpdateView : NSStackView
 {
     private readonly NSButton _button = LauncherStyle.IconButton("arrow.triangle.2.circlepath",
         "Check for updates and install the latest release");
+
+    private readonly AppUpdateClient _client;
+    private readonly HttpClient _http;
+    private readonly MacUpdateInstaller _installer;
+    private readonly CancellationTokenSource _lifetime = new();
+
     private readonly NSTextField _status = LauncherStyle.Label("", 11, NSFontWeight.Regular,
         LauncherStyle.SecondaryText);
-    private readonly CancellationTokenSource _lifetime = new();
-    private readonly AppUpdateClient _client;
-    private readonly MacUpdateInstaller _installer;
+
     private readonly AppVersion _version;
-    private readonly HttpClient _http;
-    private Task _operation = Task.CompletedTask;
-    private TaskCompletionSource? _idle;
-    private bool _startupChecked;
-    private bool _gameBusy;
     private bool _disposed;
+    private bool _gameBusy;
+    private TaskCompletionSource? _idle;
+    private Task _operation = Task.CompletedTask;
+    private bool _startupChecked;
 
     public AppUpdateView(HttpClient http, MacUpdateInstaller installer, AppVersion version)
     {
@@ -40,13 +43,14 @@ public sealed class AppUpdateView : NSStackView
         _button.Activated += OnUpdate;
     }
 
+    public bool IsBusy { get; private set; }
+    public bool HasOperation { get; private set; }
+
     public Task ConfirmLaunchAsync()
     {
         return _installer.ConfirmLaunchAsync(_version);
     }
 
-    public bool IsBusy { get; private set; }
-    public bool HasOperation { get; private set; }
     public event EventHandler? BusyChanged;
 
     public void SetGameBusy(bool busy)
@@ -58,7 +62,8 @@ public sealed class AppUpdateView : NSStackView
             _ = _idle?.TrySetResult();
         }
 
-        _button.ToolTip = busy ? "Finish the current game or installation before updating DeadLocky."
+        _button.ToolTip = busy
+            ? "Finish the current game or installation before updating DeadLocky."
             : $"DeadLocky {_version} · Check for updates and install the latest release";
     }
 
@@ -112,7 +117,11 @@ public sealed class AppUpdateView : NSStackView
             }
 
             AppLog.Event("update.check.result", "newer release available");
-            if (_gameBusy) { AppLog.Event("update.install", "deferred while application is busy"); }
+            if (_gameBusy)
+            {
+                AppLog.Event("update.install", "deferred while application is busy");
+            }
+
             while (_gameBusy)
             {
                 SetStatus($"{release.Version} ready · Installs when idle", "arrow.down.circle");
@@ -138,7 +147,8 @@ public sealed class AppUpdateView : NSStackView
             using PreparedAppUpdate update = await _installer.PrepareAsync(_client, release, progress, _lifetime.Token);
             SetStatus("Installing · Restarting DeadLocky…");
             await update.StartInstallerAsync(Environment.ProcessId, _lifetime.Token);
-            NSApplication.SharedApplication.Terminate(this);
+
+            BeginInvokeOnMainThread(() => NSApplication.SharedApplication.Terminate(this));
 #endif
         }
         catch (OperationCanceledException)
